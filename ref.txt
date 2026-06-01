@@ -1,0 +1,280 @@
+
+## CamerA
+
+import math
+import glm
+
+class Camera:
+    def __init__(self,
+                 position=glm.vec3(0.0, 0.0, 3.0),
+                 up=glm.vec3(0.0, 1.0, 0.0),
+                 yaw=-90.0,
+                 pitch=0.0,
+                 fov=45.0):
+        self.position = position
+        self.worldUp = up
+        self.yaw = yaw
+        self.pitch = pitch
+        self.fov = fov
+
+        self.front = glm.vec3(0.0, 0.0, -1.0)
+        self.up = glm.vec3(0.0, 1.0, 0.0)
+        self.right = glm.vec3(1.0, 0.0, 0.0)
+
+        self.movementSpeed = 5.0
+        self.mouseSensitivity = 0.1
+
+        self._update_camera_vectors()
+
+    def get_view_matrix(self):
+        return glm.lookAt(self.position, self.position + self.front, self.up)
+
+    def process_keyboard(self, direction, deltaTime):
+        velocity = self.movementSpeed * deltaTime
+        if direction == "FORWARD":
+            self.position += self.front * velocity
+        if direction == "BACKWARD":
+            self.position -= self.front * velocity
+        if direction == "LEFT":
+            self.position -= glm.normalize(glm.cross(self.front, self.up)) * velocity
+        if direction == "RIGHT":
+            self.position += glm.normalize(glm.cross(self.front, self.up)) * velocity
+        if direction == "UP":
+            self.position += self.up * velocity
+        if direction == "DOWN":
+            self.position -= self.up * velocity
+
+    def process_mouse_movement(self, xoffset, yoffset, constrain_pitch=True):
+        xoffset *= self.mouseSensitivity
+        yoffset *= self.mouseSensitivity
+
+        self.yaw += xoffset
+        self.pitch += yoffset
+
+        if constrain_pitch:
+            if self.pitch > 89.0:
+                self.pitch = 89.0
+            if self.pitch < -89.0:
+                self.pitch = -89.0
+
+        self._update_camera_vectors()
+
+    def process_mouse_scroll(self, yoffset):
+        self.fov -= yoffset
+        if self.fov < 1.0:
+            self.fov = 1.0
+        if self.fov > 45.0:
+            self.fov = 45.0
+
+    def _update_camera_vectors(self):
+        # calcula o vetor front a partir de yaw e pitch
+        yaw_r = math.radians(self.yaw)
+        pitch_r = math.radians(self.pitch)
+
+        x = math.cos(yaw_r) * math.cos(pitch_r)
+        y = math.sin(pitch_r)
+        z = math.sin(yaw_r) * math.cos(pitch_r)
+
+        front = glm.vec3(x, y, z)
+        self.front = glm.normalize(front)
+        self.right = glm.normalize(glm.cross(self.front, self.worldUp))
+        self.up = glm.normalize(glm.cross(self.right, self.front))
+
+
+class CameraController:
+    def __init__(self, camera: Camera):
+        self.camera = camera
+
+    # thin wrapper so main can call controller methods if desired
+    def keyboard(self, direction, deltaTime):
+        self.camera.process_keyboard(direction, deltaTime)
+
+    def mouse_move(self, xoffset, yoffset):
+        self.camera.process_mouse_movement(xoffset, yoffset)
+
+    def scroll(self, yoffset):
+        self.camera.process_mouse_scroll(yoffset)
+
+
+class CameraController:
+    def __init__(self, camera):
+        self.camera = camera
+
+## VertexShader 
+
+#version 330 core
+
+layout(location = 0) in vec2 a_pos;
+layout(location = 1) in vec3 a_color;
+
+out vec3 f_color;
+uniform mat4 projectionMatrix;
+uniform mat4 viewMatrix;
+uniform mat4 modelMatrix;
+
+void main(){
+    f_color = a_color;
+    vec4 worldPos = modelMatrix * vec4(a_pos, 0.0, 1.0);
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
+}
+
+## main
+
+import math
+import numpy as np                                                              # pip install numpy
+import os
+import glm                                                                      # pip install PyGLM
+from circle import *
+from OpenGL.GL import *                                                         # pip install PyOpenGL PyOpenGL_accelerate                                                
+from OpenGL.GLU import *                                                         
+from OpenGL.GLUT import *                                                       
+from shader import Shader
+from camera import Camera
+import time
+
+obj = None
+myShader = None
+camera = None
+
+# window size
+WIDTH = 800
+HEIGHT = 600
+
+# input state
+keys = set()
+lastX = WIDTH / 2
+lastY = HEIGHT / 2
+first_mouse = True
+lastFrame = 0.0
+
+def init(): 
+    global obj, myShader
+    global camera
+    obj = Circle() 
+    glClearColor(0.0, 0.0, 0.0, 1.0)                                           
+    glLineWidth(3.0)
+    here = os.path.dirname(os.path.abspath(__file__))                           
+    myShader = Shader(os.path.join(here, "0_vertexShader.glsl"), 
+                      os.path.join(here, "0_fragmentShader.glsl"))
+    # create camera
+    camera = Camera(position=glm.vec3(0.0, 0.0, 3.0))
+
+    # set projection matrix once
+    projectionMatrix = glm.perspective(glm.radians(camera.fov), WIDTH / HEIGHT, 0.1, 100.0)
+    myShader.bind()
+    projectionMatrixLoc = glGetUniformLocation(myShader.shaderId, "projectionMatrix")
+    glUniformMatrix4fv(projectionMatrixLoc, 1, GL_FALSE, glm.value_ptr(projectionMatrix))
+    # set an identity model matrix (can be updated per-object later)
+    modelLoc = glGetUniformLocation(myShader.shaderId, "modelMatrix")
+    identity = glm.mat4(1.0)
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm.value_ptr(identity))
+    myShader.unbind()
+
+    
+
+def render():
+    glClear(GL_COLOR_BUFFER_BIT)
+    myShader.bind()
+    # update view matrix from camera each frame
+    view = camera.get_view_matrix()
+    viewLoc = glGetUniformLocation(myShader.shaderId, "viewMatrix")
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm.value_ptr(view))
+
+    obj.render(myShader.shaderId)
+    myShader.unbind()
+    glutSwapBuffers()
+
+
+def process_input(deltaTime):
+    if camera is None:
+        return
+    if 'w' in keys:
+        camera.process_keyboard("FORWARD", deltaTime)
+    if 's' in keys:
+        camera.process_keyboard("BACKWARD", deltaTime)
+    if 'a' in keys:
+        camera.process_keyboard("LEFT", deltaTime)
+    if 'd' in keys:
+        camera.process_keyboard("RIGHT", deltaTime)
+    if 'q' in keys:
+        camera.process_keyboard("UP", deltaTime)
+    if 'e' in keys:
+        camera.process_keyboard("DOWN", deltaTime)
+
+
+def keyboard(key, x, y):
+    # key comes as bytes
+    try:
+        k = key.decode('utf-8').lower()
+    except Exception:
+        return
+    keys.add(k)
+    if k == '\x1b':
+        # ESC
+        sys.exit(0)
+
+
+def keyboard_up(key, x, y):
+    try:
+        k = key.decode('utf-8').lower()
+    except Exception:
+        return
+    if k in keys:
+        keys.remove(k)
+
+
+def mouse_motion(x, y):
+    global lastX, lastY, first_mouse
+    if first_mouse:
+        lastX = x
+        lastY = y
+        first_mouse = False
+
+    xoffset = x - lastX
+    yoffset = lastY - y
+
+    lastX = x
+    lastY = y
+
+    if camera:
+        camera.process_mouse_movement(xoffset, yoffset)
+
+
+def mouse_button(button, state, x, y):
+    # FreeGLUT encodes wheel as button 3 (up) and 4 (down)
+    if button == 3:
+        if camera:
+            camera.process_mouse_scroll(1.0)
+    elif button == 4:
+        if camera:
+            camera.process_mouse_scroll(-1.0)
+
+
+def idle():
+    global lastFrame
+    current = time.time()
+    if lastFrame == 0.0:
+        lastFrame = current
+    deltaTime = current - lastFrame
+    lastFrame = current
+    process_input(deltaTime)
+    glutPostRedisplay()
+
+def main():
+    
+    glutInit()
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB)
+    glutInitWindowSize(WIDTH, HEIGHT)
+    glutCreateWindow(b"Project Astra")
+    init()
+    glutDisplayFunc(render)
+    glutKeyboardFunc(keyboard)
+    glutKeyboardUpFunc(keyboard_up)
+    glutPassiveMotionFunc(mouse_motion)
+    glutMouseFunc(mouse_button)
+    glutIdleFunc(idle)
+    glutMainLoop()
+
+if __name__ == "__main__":
+    main()
+
