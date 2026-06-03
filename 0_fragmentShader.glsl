@@ -5,6 +5,8 @@ in vec3 f_color;
 out vec4 fragColor;
 
 void main(){
-
-    fragColor = vec4(f_color, 1.0);
+    float ambientStrength = 0.1;
+    vec3 ambient = ambientStrength * f_color;
+    vec3 result = ambient * f_color;
+    fragColor = vec4(result, 1.0);
 }

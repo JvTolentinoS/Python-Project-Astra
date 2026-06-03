@@ -1,15 +1,18 @@
 import math
 import glm
+from OpenGL.GLUT import *  
 
 class Camera:
         def __init__(self,
+                    WIDTH,
+                    HEIGHT,
                     cameraPos = glm.vec3(0.0, 0.0, 1.0),    # posição inicial
                     cameraFront = glm.vec3(0.0, 0.0, -1.0), # aonde a camera está olhando
                     cameraUp = glm.vec3(0.0, 1.0, 0.0),     # direção para cima da camera
                     cameraRight = glm.vec3(1.0, 0.0, 0.0),  # direção lateral
                     yaw = -90.0,                            # horizonte de rotação                       
                     pitch = 0.0,                            # perpendicular de rotação 
-                    movementSpeed = 0.05):                     # velocidade do passo    
+                    movementSpeed = 0.05):                  # velocidade do passo                         
 
             self.cameraPos = cameraPos
             self.cameraFront = cameraFront
@@ -19,6 +22,25 @@ class Camera:
             self.pitch = pitch
             self.mouseSensitivity = 0.1
             self.movementSpeed = movementSpeed
+
+            # controle de mouse
+            self.firstMouse = True
+            self.ignore_warp_event = False
+            self.lastX = None
+            self.lastY = None
+            
+            # direção de movimento do teclado
+            self.foward = False 
+            self.backward = False
+            self.left = False 
+            self.right = False 
+            self.up = False
+            self.down = False
+
+            # Tela
+            self.WIDTH = WIDTH
+            self.HEIGHT = HEIGHT
+
         def getViewMatrix(self):
             view = glm.lookAt(self.cameraPos, 
                               self.cameraPos + 
@@ -68,3 +90,77 @@ class Camera:
                 self.cameraPos += self.cameraUp * velocity
             if direction == "DOWN":
                 self.cameraPos -= self.cameraUp * velocity
+
+                # Mouse Input/Tracking
+        
+        def mouseLookCallback(self, xpos, ypos):
+
+            HEIGHT_MIDDLE_POINT, WIDTH_MIDDLE_POINT = int(self.HEIGHT / 2), int(self.WIDTH / 2)
+
+            if self.ignore_warp_event:
+                self.ignore_warp_event = False
+                self.lastX = WIDTH_MIDDLE_POINT
+                self.lastY = HEIGHT_MIDDLE_POINT
+                return
+
+            if self.firstMouse:
+                self.lastX = xpos
+                self.lastY = ypos
+                self.firstMouse = False
+
+            xoffset = xpos - self.lastX
+            yoffset = self.lastY - ypos
+
+            self.processMouseMovement(xoffset, yoffset)
+
+            self.lastX = WIDTH_MIDDLE_POINT
+            self.lastY = HEIGHT_MIDDLE_POINT
+            self.ignore_warp_event = True
+            glutWarpPointer(WIDTH_MIDDLE_POINT, HEIGHT_MIDDLE_POINT)
+
+        # Key Down
+        def keyDownCallback(self, key, x, y):
+
+            if key == b"w":
+                self.foward = True
+            if key == b"s":
+                self.backward = True
+            if key == b"d":
+                self.right = True
+            if key == b"a":
+                self.left = True
+            if key == b"q":
+                self.up = True
+            if key == b"e":
+                self.down = True
+
+        # Key Release
+        def keyUpCallback(self, key, x, y):
+
+            if key == b"w":
+                self.foward = False
+            if key == b"s":
+                self.backward = False
+            if key == b"d":
+                self.right = False
+            if key == b"a":
+                self.left = False
+            if key == b"q":
+                self.up = False
+            if key == b"e":
+                self.down = False
+
+        # WASD horizontal axis and QE for up/down 
+        def doMovement(self):
+            if self.foward:
+                self.processKeyboard("FOWARD")
+            if self.backward:
+                self.processKeyboard("BACKWARD")
+            if self.right:
+                self.processKeyboard("RIGHT")
+            if self.left:
+                self.processKeyboard("LEFT")
+            if self.up:
+                self.processKeyboard("UP")
+            if self.down:
+                self.processKeyboard("DOWN")
