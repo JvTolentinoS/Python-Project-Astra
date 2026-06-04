@@ -9,12 +9,13 @@ class Object:
     def __init__(self,
                  initPosition = glm.vec3(0.0, 0.0, 0.0),
                  initVelocity = glm.vec3(0.0, 0.0, 0.0),
-                 mass = 0.0,
-                 radius = 0.5, 
+                 mass = 1, # kg
+                 density = 1, # kg/m³ 
                  r=1,g=0,b=0,
                  glow = False,
+                 name="Object"
                 ):
-                
+
         self.vertices = [
             ##  pos      cor    
             ## [0.0,0.0,0.0, 0,0,0]
@@ -25,9 +26,11 @@ class Object:
         
         self.position = initPosition
         self.velocity = initVelocity
-        self.radius = radius
+        self.radius = math.cbrt(3 * mass / (4 * math.pi * density)) / 30000 # Apenas para diminuir a escala da simulação
         self.mass = mass
+        self.density = density
         self.glow = glow
+        self.name = name
 
         for i in range(self.stacks + 1):
             theta1 = (i / self.stacks) * glm.pi()
@@ -36,10 +39,10 @@ class Object:
                 phi1 = j / self.sectors * 2 * glm.pi()
                 phi2 = (j+1) / self.sectors * 2 * glm.pi()
                 
-                v1 = self.sphericalToCartesian(radius, theta1, phi1)
-                v2 = self.sphericalToCartesian(radius, theta1, phi2)
-                v3 = self.sphericalToCartesian(radius, theta2, phi1)
-                v4 = self.sphericalToCartesian(radius, theta2, phi2)
+                v1 = self.sphericalToCartesian(self.radius, theta1, phi1)
+                v2 = self.sphericalToCartesian(self.radius, theta1, phi2)
+                v3 = self.sphericalToCartesian(self.radius, theta2, phi1)
+                v4 = self.sphericalToCartesian(self.radius, theta2, phi2)
 
                 # triangulo 1
                 self.vertices.extend([v1[0], v1[1], v1[2], r,g,b])
@@ -99,17 +102,17 @@ class Object:
         glDrawArrays(GL_TRIANGLES, 0, self.qtdVertices) ## TROCAR
         glBindVertexArray(0)
 
-    def updatePosition(self):
-        self.position[0] += self.velocity[0] / 96
-        self.position[1] += self.velocity[1] / 96
-        self.position[2] += self.velocity[2] / 96
+    def updatePosition(self, dt):
+        self.position[0] += self.velocity[0] * dt
+        self.position[1] += self.velocity[1] * dt
+        self.position[2] += self.velocity[2] * dt
 
     def getPosition(self):
         return self.position
     
-    def accelerate(self, x, y, z):
-        self.velocity[0] += x / 100
-        self.velocity[1] += y / 100
-        self.velocity[2] += z / 100
+    def accelerate(self, x, y, z, dt):
+        self.velocity[0] += x * dt
+        self.velocity[1] += y * dt
+        self.velocity[2] += z * dt
 
     

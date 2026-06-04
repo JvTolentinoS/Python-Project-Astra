@@ -12,7 +12,7 @@ class Camera:
                     cameraRight = glm.vec3(1.0, 0.0, 0.0),  # direção lateral
                     yaw = -90.0,                            # horizonte de rotação                       
                     pitch = 0.0,                            # perpendicular de rotação 
-                    movementSpeed = 0.05):                  # velocidade do passo                         
+                    movementSpeed = 10000):                 # velocidade do passo                         
 
             self.cameraPos = cameraPos
             self.cameraFront = cameraFront

@@ -18,10 +18,11 @@ camera = Camera(WIDTH=1280, HEIGHT=720)
 myShader = None
 lastFrame = 0.0
 deltaTime = 0.0
+objs = []
 
 # Configurações Iniciais
 def init(): 
-    global myShader
+    global myShader, objs
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
     glutInitWindowSize(WIDTH, HEIGHT)
     glutCreateWindow(b"Project Astra")
@@ -32,19 +33,20 @@ def init():
     here = os.path.dirname(os.path.abspath(__file__))                           
     myShader = Shader(os.path.join(here, "0_vertexShader.glsl"), 
                       os.path.join(here, "0_fragmentShader.glsl"))
+    
+    objs = [
+        Object(initPosition=glm.vec3(384, 0, 0), initVelocity=glm.vec3(0, 0, 0), mass=7.34e22, density=3340, r=0.5, g=0.5, b=0.5, name="Moon"),
+        Object(initPosition=glm.vec3(0, 0, 0), initVelocity=glm.vec3(0, 0, 0), mass=5.97e24, density=5514, r=0.4, g=0.4, b=0.8, name="Earth"),
+    ]
+
 
 
 def simulate():
-    global obj, myShader, lastFrame, deltaTime
+    global objs, myShader, lastFrame, deltaTime
 
-    isRunning = True
-    isPaused = False
+    isRunning = True ##
+    isPaused = False ## 
     isOpen = None ## Setar depois
-
-    objs = [
-        Object(initPosition=glm.vec3(0, 0, 0), initVelocity=glm.vec3(0, 0, 0), mass=1, radius=1, r=1, g=0, b=0),
-        Object(initPosition=glm.vec3(2, 0, 0), initVelocity=glm.vec3(0, 0, 0), mass=1, radius=1, r=0, g=1, b=0),
-    ]
 
     currentFrame = glutGet(GLUT_ELAPSED_TIME) / 1000.0
     deltaTime = currentFrame - lastFrame
@@ -61,6 +63,7 @@ def simulate():
                         direction = [dx / distance, 
                                      dy / distance, 
                                      dz / distance]
+                        
                         distance *= 1000
 
                         G = 6.67430e-11 # Constante gravitacional
@@ -72,16 +75,9 @@ def simulate():
                                direction[1] * acc1,
                                direction[2] * acc1]
                         
-                        obj.accelerate(acc[0], acc[1], acc[2])
-            
-            obj.updatePosition()
-            obj.position = glm.vec3(obj.position[0], obj.position[1], obj.position[2])
-            model = glm.translate(obj.position)
-            myShader.bind()
-            myShader.setUniformMat4("model", model)
-            obj.render(myShader.shaderId)
-            myShader.unbind()
-
+                        obj.accelerate(acc[0], acc[1], acc[2], dt=deltaTime)
+        obj.updatePosition(dt=deltaTime)    
+                        
 
 
 
@@ -93,8 +89,14 @@ def render():
     myShader.bind()
     view = getViewMatrix()
     myShader.setUniformMat4("projection", projection)
-    myShader.setUniformMat4("model", glm.mat4(1.0))
     myShader.setUniformMat4("view", view)
+
+    for obj in objs:
+        model = glm.translate(obj.position)
+        myShader.setUniformMat4("model", model)
+        obj.render(myShader.shaderId)
+        print(f"{obj.name} position: {obj.getPosition()} radius: {obj.radius} mass: {obj.mass} density: {obj.density}")
+
     myShader.unbind()
 
     glutSwapBuffers()
