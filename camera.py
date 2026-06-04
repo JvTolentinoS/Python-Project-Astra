@@ -150,7 +150,7 @@ class Camera:
             if key == b"e":
                 self.down = False
 
-        # WASD horizontal axis and QE for up/down 
+        # Movimento de Teclado 
         def doMovement(self):
             if self.foward:
                 self.processKeyboard("FOWARD")

@@ -5,28 +5,36 @@ import numpy as np
 import glm
 from OpenGL.GL import *
 
-class Sphere:
-    def __init__(self, 
+class Object:
+    def __init__(self,
+                 initPosition = glm.vec3(0.0, 0.0, 0.0),
+                 initVelocity = glm.vec3(0.0, 0.0, 0.0),
+                 mass = 0.0,
                  radius = 0.5, 
-                 stacks = 20, 
-                 sectors = 20, 
                  r=1,g=0,b=0,
-                 posx=0, posy=0, posz=0,
-                 velx=0, vely=0, velz=0):
-        
-        self.position = glm.vec3(posx, posy, posz)
-        self.velocity = glm.vec3(velx, vely, velz)
+                 glow = False,
+                ):
+                
         self.vertices = [
             ##  pos      cor    
             ## [0.0,0.0,0.0, 0,0,0]
         ]
 
-        for i in range(stacks + 1):
-            theta1 = (i / stacks) * glm.pi()
-            theta2 = (i+1) / stacks * glm.pi()
-            for j in range(sectors):
-                phi1 = j / sectors * 2 * glm.pi()
-                phi2 = (j+1) / sectors * 2 * glm.pi()
+        self.stacks = 20
+        self.sectors = 20
+        
+        self.position = initPosition
+        self.velocity = initVelocity
+        self.radius = radius
+        self.mass = mass
+        self.glow = glow
+
+        for i in range(self.stacks + 1):
+            theta1 = (i / self.stacks) * glm.pi()
+            theta2 = (i+1) / self.stacks * glm.pi()
+            for j in range(self.sectors):
+                phi1 = j / self.sectors * 2 * glm.pi()
+                phi2 = (j+1) / self.sectors * 2 * glm.pi()
                 
                 v1 = self.sphericalToCartesian(radius, theta1, phi1)
                 v2 = self.sphericalToCartesian(radius, theta1, phi2)
@@ -47,16 +55,18 @@ class Sphere:
         self.vertices = np.array(self.vertices,             # 32 bits
                                  dtype=np.float32)              
         
+        # Criar VAO
         self.vaoId = glGenVertexArrays(1)
         glBindVertexArray(self.vaoId)
 
+        # Inicializa VBO
         vboId = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER,                       # dados para vbo
-                     vboId)                
-        glBufferData(GL_ARRAY_BUFFER,                       # tipo de buffer 00                    self.vertices.nbytes,                  # tamanho do buffer 
-                     self.vertices, GL_DYNAMIC_DRAW)        # para animar as orbitas
-        
-        # POSIÇÃO
+        glBindBuffer(GL_ARRAY_BUFFER,vboId)                 
+        glBufferData(GL_ARRAY_BUFFER,
+                     self.vertices.nbytes,                   
+                     self.vertices, GL_DYNAMIC_DRAW)       
+         
+        # Setar os ponteiros dos atributos
         glVertexAttribPointer(0,                        # pos
                               3,                        # qtd de valores
                               GL_FLOAT,                 # tipo de dado
@@ -72,10 +82,10 @@ class Sphere:
                               6*4,                      # intervalo de bytes entre atributos
                               ctypes.c_void_p(3*4))     # ponteiro do segundo attributo
 
-        glEnableVertexAttribArray(0)                   # habilitar pos
-        glEnableVertexAttribArray(1)                   # habilitar cor
+        glEnableVertexAttribArray(0)                    # habilitar pos
+        glEnableVertexAttribArray(1)                    # habilitar cor
         
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
+        glBindBuffer(GL_ARRAY_BUFFER, 0)    
         glBindVertexArray(0)
 
     def sphericalToCartesian(self, r, theta, phi):
@@ -89,5 +99,17 @@ class Sphere:
         glDrawArrays(GL_TRIANGLES, 0, self.qtdVertices) ## TROCAR
         glBindVertexArray(0)
 
-                
-                
+    def updatePosition(self):
+        self.position[0] += self.velocity[0] / 96
+        self.position[1] += self.velocity[1] / 96
+        self.position[2] += self.velocity[2] / 96
+
+    def getPosition(self):
+        return self.position
+    
+    def accelerate(self, x, y, z):
+        self.velocity[0] += x / 100
+        self.velocity[1] += y / 100
+        self.velocity[2] += z / 100
+
+    
