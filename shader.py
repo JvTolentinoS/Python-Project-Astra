@@ -39,4 +39,4 @@ class Shader:
             return name_loc
         glUniformMatrix4fv(name_loc, 1, GL_FALSE, glm.value_ptr(mat))
         return name_loc
- 
+    

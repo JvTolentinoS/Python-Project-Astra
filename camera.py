@@ -6,13 +6,13 @@ class Camera:
         def __init__(self,
                     WIDTH,
                     HEIGHT,
-                    cameraPos = glm.vec3(0.0, 0.0, 1.0),    # posição inicial
+                    cameraPos = glm.vec3(0.0, 0.0, 2000),    # posição inicial
                     cameraFront = glm.vec3(0.0, 0.0, -1.0), # aonde a camera está olhando
                     cameraUp = glm.vec3(0.0, 1.0, 0.0),     # direção para cima da camera
                     cameraRight = glm.vec3(1.0, 0.0, 0.0),  # direção lateral
                     yaw = -90.0,                            # horizonte de rotação                       
                     pitch = 0.0,                            # perpendicular de rotação 
-                    movementSpeed = 10000):                 # velocidade do passo                         
+                    movementSpeed = 100):                 # velocidade do passo                         
 
             self.cameraPos = cameraPos
             self.cameraFront = cameraFront
@@ -36,6 +36,10 @@ class Camera:
             self.right = False 
             self.up = False
             self.down = False
+
+            # para simulação
+            self.pause = False
+            self.simulationSpeed = 1
 
             # Tela
             self.WIDTH = WIDTH
@@ -133,7 +137,21 @@ class Camera:
                 self.up = True
             if key == b"e":
                 self.down = True
-
+            if key == b"p":
+                if self.pause == False:
+                    self.pause = True
+                else: 
+                    self.pause = False 
+            if key == b"+":
+                if self.simulationSpeed == 0.5:
+                    self.simulationSpeed += 0.5
+                else:
+                    self.simulationSpeed += 1
+            if key == b"-":
+                if self.simulationSpeed >= 1:
+                    self.simulationSpeed -= 0.5
+                else:
+                    self.simulationSpeed -= 0
         # Key Release
         def keyUpCallback(self, key, x, y):
 
