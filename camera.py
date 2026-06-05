@@ -125,19 +125,19 @@ class Camera:
         # Key Down
         def keyDownCallback(self, key, x, y):
 
-            if key == b"w":
+            if key == b"w" or key == b'W':
                 self.foward = True
-            if key == b"s":
+            if key == b"s" or key == b'S':
                 self.backward = True
-            if key == b"d":
+            if key == b"d" or key == b'D':
                 self.right = True
-            if key == b"a":
+            if key == b"a" or key == b'A':
                 self.left = True
-            if key == b"q":
+            if key == b"q" or key == b'Q':
                 self.up = True
-            if key == b"e":
+            if key == b"e" or key == b'E':
                 self.down = True
-            if key == b"p":
+            if key == b"p" or key == b'P':
                 if self.pause == False:
                     self.pause = True
                 else: 
@@ -155,17 +155,17 @@ class Camera:
         # Key Release
         def keyUpCallback(self, key, x, y):
 
-            if key == b"w":
+            if key == b"w" or key == b'W':
                 self.foward = False
-            if key == b"s":
+            if key == b"s" or key == b'S':
                 self.backward = False
-            if key == b"d":
+            if key == b"d" or key == b'D':
                 self.right = False
-            if key == b"a":
+            if key == b"a" or key == b'A':
                 self.left = False
-            if key == b"q":
+            if key == b"q" or key == b'Q':
                 self.up = False
-            if key == b"e":
+            if key == b"e" or key == b'E':
                 self.down = False
 
         # Movimento de Teclado 

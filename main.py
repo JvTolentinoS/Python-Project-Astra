@@ -19,13 +19,14 @@ deltaTime = 0.0
 # Objetos Globais
 camera = Camera(WIDTH=1280, HEIGHT=720)
 myShader = None
+bdg_obj = None
 objs = []
-background = None
 
 # Configurações Iniciais
 def init(): 
-    global myShader, objs, background
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
+    global myShader, myBgdShader, objs, bdg_obj
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH | GLUT_MULTISAMPLE)
+    glutSetOption(GLUT_MULTISAMPLE, 8)
     glutInitWindowSize(WIDTH, HEIGHT)
     glutCreateWindow(b"Project Astra")
     glEnable(GL_DEPTH_TEST)
@@ -35,13 +36,14 @@ def init():
     here = os.path.dirname(os.path.abspath(__file__))                           
     myShader = Shader(os.path.join(here, "0_vertexShader.glsl"), 
                       os.path.join(here, "0_fragmentShader.glsl"))
-    
+    myBgdShader = Shader(os.path.join(here, "0_bgd_vertexShader.glsl"), 
+                         os.path.join(here, "0_bgd_fragmentShader.glsl"))
     objs = [
         Object(initPosition=glm.vec3(1500, 0, 0), initVelocity=glm.vec3(0, 500, 0), mass=7.34e22, density=3340, r=0.5, g=0.5, b=0.5, name="Moon"),
         Object(initPosition=glm.vec3(0, 0, 0), initVelocity=glm.vec3(0,0, 0), mass=5.97e24, density=5514, r=0.4, g=0.4, b=1, name="Earth"),
     ]
 
-    background = Background("background.jpg")
+    bdg_obj = Background("background.jpg")
 
 
 
@@ -95,18 +97,19 @@ def render():
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     projection = glm.perspective(glm.radians(45.0), WIDTH / HEIGHT, 0.1, 750000)
 
-    myShader.bind()
     
+    myBgdShader.bind()
+    glDepthMask(GL_FALSE)
+    bdg_obj.render(myShader.shaderId)
+    glDepthMask(GL_TRUE)
+    myBgdShader.unbind()
+
+    myShader.bind()
     view = getViewMatrix()
     myShader.setUniformMat4("projection", projection)
     myShader.setUniformMat4("view", view)
-    
-    glDepthMask(GL_FALSE)
-    glUniform1i(glGetUniformLocation(myShader.shaderId, "u_is_background"), 1)
-    background.render(myShader.shaderId)
-    glUniform1i(glGetUniformLocation(myShader.shaderId, "u_is_background"), 0)
-    glDepthMask(GL_TRUE)
-    
+    myShader.setUniform("lightDir", 0.5, -1.0, 0.3)
+    myShader.setUniform("lightColor", 1.0, 1.0, 1.0)
     for obj in objs:
         model = glm.translate(obj.position)
         myShader.setUniformMat4("model", model)

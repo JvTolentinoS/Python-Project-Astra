@@ -115,8 +115,8 @@ class Object:
             
         ]
 
-        self.stacks = 20
-        self.sectors = 20
+        self.stacks = 30
+        self.sectors = 30
         
         self.position = initPosition
         self.velocity = initVelocity
@@ -140,17 +140,22 @@ class Object:
                 v3 = self.sphericalToCartesian(self.radius, theta2, phi1)
                 v4 = self.sphericalToCartesian(self.radius, theta2, phi2)
 
+                n1 = glm.normalize(v1)
+                n2 = glm.normalize(v2)
+                n3 = glm.normalize(v3)
+                n4 = glm.normalize(v4)
+
                 # triangulo 1
-                self.vertices.extend([v1[0], v1[1], v1[2], r,g,b])
-                self.vertices.extend([v2[0], v2[1], v2[2], r,g,b])
-                self.vertices.extend([v3[0], v3[1], v3[2], r,g,b])
+                self.vertices.extend([v1[0], v1[1], v1[2], r,g,b, n1.x, n1.y, n1.z])
+                self.vertices.extend([v2[0], v2[1], v2[2], r,g,b, n2.x, n2.y, n2.z])
+                self.vertices.extend([v3[0], v3[1], v3[2], r,g,b, n3.x, n3.y, n3.z])
 
                 # triangulo 2
-                self.vertices.extend([v2[0], v2[1], v2[2], r,g,b])
-                self.vertices.extend([v4[0], v4[1], v4[2], r,g,b])
-                self.vertices.extend([v3[0], v3[1], v3[2], r,g,b])
+                self.vertices.extend([v2[0], v2[1], v2[2], r,g,b, n2.x, n2.y, n2.z])
+                self.vertices.extend([v4[0], v4[1], v4[2], r,g,b, n4.x, n4.y, n4.z])
+                self.vertices.extend([v3[0], v3[1], v3[2], r,g,b, n3.x, n3.y, n3.z])
         
-        self.qtdVertices = len(self.vertices) // 6
+        self.qtdVertices = len(self.vertices) // 9
         self.vertices = np.array(self.vertices,             # 32 bits
                                  dtype=np.float32)              
         
@@ -170,7 +175,7 @@ class Object:
                               3,                        # qtd de valores
                               GL_FLOAT,                 # tipo de dado
                               GL_FALSE,                 # não normalizar
-                              6*4,                      # intervalo de bytes entre atributos
+                              9*4,                      # intervalo de bytes entre atributos
                               ctypes.c_void_p(0))       # ponteiro do primeiro attributo
 
         # CORES
@@ -178,12 +183,22 @@ class Object:
                               3,                        # qtd de valores
                               GL_FLOAT,                 # tipo de dado
                               GL_FALSE,                 # não normalizar
-                              6*4,                      # intervalo de bytes entre atributos
+                              9*4,                      # intervalo de bytes entre atributos
                               ctypes.c_void_p(3*4))     # ponteiro do segundo attributo
+
+        # NORMAIS
+        glVertexAttribPointer(2,                       # pos
+                              3,                        # qtd de valores
+                              GL_FLOAT,                 # tipo de dado
+                              GL_FALSE,                 # não normalizar
+                              9*4,                      # intervalo de bytes entre atributos
+                              ctypes.c_void_p(6*4))     # ponteiro do segundo attributo
+    
 
         glEnableVertexAttribArray(0)                    # habilitar pos
         glEnableVertexAttribArray(1)                    # habilitar cor
-        
+        glEnableVertexAttribArray(2)                    # habilita vetores normalizados
+
         glBindBuffer(GL_ARRAY_BUFFER, 0)    
         glBindVertexArray(0)
 
