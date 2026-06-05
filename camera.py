@@ -6,13 +6,13 @@ class Camera:
         def __init__(self,
                     WIDTH,
                     HEIGHT,
-                    cameraPos = glm.vec3(0.0, 0.0, 1.0),    # posição inicial
+                    cameraPos = glm.vec3(0.0, 0.0, 2000),    # posição inicial
                     cameraFront = glm.vec3(0.0, 0.0, -1.0), # aonde a camera está olhando
                     cameraUp = glm.vec3(0.0, 1.0, 0.0),     # direção para cima da camera
                     cameraRight = glm.vec3(1.0, 0.0, 0.0),  # direção lateral
                     yaw = -90.0,                            # horizonte de rotação                       
                     pitch = 0.0,                            # perpendicular de rotação 
-                    movementSpeed = 10000):                 # velocidade do passo                         
+                    movementSpeed = 100):                 # velocidade do passo                         
 
             self.cameraPos = cameraPos
             self.cameraFront = cameraFront
@@ -36,6 +36,10 @@ class Camera:
             self.right = False 
             self.up = False
             self.down = False
+
+            # para simulação
+            self.pause = False
+            self.simulationSpeed = 1
 
             # Tela
             self.WIDTH = WIDTH
@@ -121,33 +125,47 @@ class Camera:
         # Key Down
         def keyDownCallback(self, key, x, y):
 
-            if key == b"w":
+            if key == b"w" or key == b'W':
                 self.foward = True
-            if key == b"s":
+            if key == b"s" or key == b'S':
                 self.backward = True
-            if key == b"d":
+            if key == b"d" or key == b'D':
                 self.right = True
-            if key == b"a":
+            if key == b"a" or key == b'A':
                 self.left = True
-            if key == b"q":
+            if key == b"q" or key == b'Q':
                 self.up = True
-            if key == b"e":
+            if key == b"e" or key == b'E':
                 self.down = True
-
+            if key == b"p" or key == b'P':
+                if self.pause == False:
+                    self.pause = True
+                else: 
+                    self.pause = False 
+            if key == b"+":
+                if self.simulationSpeed == 0.5:
+                    self.simulationSpeed += 0.5
+                else:
+                    self.simulationSpeed += 1
+            if key == b"-":
+                if self.simulationSpeed >= 1:
+                    self.simulationSpeed -= 0.5
+                else:
+                    self.simulationSpeed -= 0
         # Key Release
         def keyUpCallback(self, key, x, y):
 
-            if key == b"w":
+            if key == b"w" or key == b'W':
                 self.foward = False
-            if key == b"s":
+            if key == b"s" or key == b'S':
                 self.backward = False
-            if key == b"d":
+            if key == b"d" or key == b'D':
                 self.right = False
-            if key == b"a":
+            if key == b"a" or key == b'A':
                 self.left = False
-            if key == b"q":
+            if key == b"q" or key == b'Q':
                 self.up = False
-            if key == b"e":
+            if key == b"e" or key == b'E':
                 self.down = False
 
         # Movimento de Teclado 
