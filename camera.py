@@ -9,13 +9,13 @@ class Camera:
         def __init__(self,
                     WIDTH,
                     HEIGHT,
-                    camera_pos = glm.vec3(0.0, 0.0, 2000.0),   
+                    camera_pos = glm.vec3(0.0, 0.0, 50000.0),   
                     camera_front = glm.vec3(0.0, 0.0, -1.0), 
                     camera_up = glm.vec3(0.0, 1.0, 0.0),     
                     camera_right = glm.vec3(1.0, 0.0, 0.0),  
                     yaw = -90.0,                            # horizonte de rotação                       
                     pitch = 0.0,                            # perpendicular de rotação 
-                    movement_speed = 100):                   # velocidade do passo                         
+                    movement_speed = 500):                                           
             
             self.camera_pos = camera_pos
             self.camera_front = camera_front

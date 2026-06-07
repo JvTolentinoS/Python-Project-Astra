@@ -1,98 +1,133 @@
 import ctypes
 import math
-from PIL import Image   
+from PIL import Image
+from PIL import ImageDraw   
 import numpy as np                                                              
 from OpenGL.GL import *
+from OpenGL.GLUT import *
 import glm
 
 
 class Background:
 
 
-    def __init__(self, 
-                 imgpath="background.jpg"):
-        self.vertices = [
-            # pos, cor, uv
-             -1.0,1.0,0.0,  1.0,1.0,1.0, 0.0,1.0,
-             -1.0,-1.0,0.0, 1.0,1.0,1.0, 0.0,0.0,
-              1.0,-1.0,0.0, 1.0,1.0,1.0, 1.0,0.0,
+    def __init__(self):
 
-             -1.0,1.0,0.0,  1.0,1.0,1.0, 0.0,1.0,
-              1.0,-1.0,0.0, 1.0,1.0,1.0, 1.0,0.0,
-              1.0,1.0,0.0,  1.0,1.0,1.0, 1.0,1.0
+        self.skybox_vertices = [
+            # pos
+            -1.0,  1.0, -1.0,
+            -1.0, -1.0, -1.0,
+             1.0, -1.0, -1.0,
+             1.0, -1.0, -1.0,
+             1.0,  1.0, -1.0,
+            -1.0,  1.0, -1.0,
+
+            -1.0, -1.0,  1.0,
+            -1.0, -1.0, -1.0,
+            -1.0,  1.0, -1.0,
+            -1.0,  1.0, -1.0,
+            -1.0,  1.0,  1.0,
+            -1.0, -1.0,  1.0,
+
+             1.0, -1.0, -1.0,
+             1.0, -1.0,  1.0,
+             1.0,  1.0,  1.0,
+             1.0,  1.0,  1.0,
+             1.0,  1.0, -1.0,
+             1.0, -1.0, -1.0,
+
+            -1.0, -1.0,  1.0,
+            -1.0,  1.0,  1.0,
+             1.0,  1.0,  1.0,
+             1.0,  1.0,  1.0,
+             1.0, -1.0,  1.0,
+            -1.0, -1.0,  1.0,
+
+            -1.0,  1.0, -1.0,
+             1.0,  1.0, -1.0,
+             1.0,  1.0,  1.0,
+             1.0,  1.0,  1.0,
+            -1.0,  1.0,  1.0,
+            -1.0,  1.0, -1.0,
+
+            -1.0, -1.0, -1.0,
+            -1.0, -1.0,  1.0,
+             1.0, -1.0, -1.0,
+             1.0, -1.0, -1.0,
+            -1.0, -1.0,  1.0,
+             1.0, -1.0,  1.0
         ]
 
-        self.qtd_vertices = len(self.vertices) // 8
-        self.vertices = np.array(self.vertices, dtype=np.float32)              
-        
+        self.qtd_vertices = len(self.skybox_vertices) // 3
+        self.vertices = np.array(self.skybox_vertices, dtype=np.float32)              
+
+        # Skybox
+        #
         # Criar VAO
-        self.VAO = glGenVertexArrays(1)
-        glBindVertexArray(self.VAO)
+        # ---------
+        self.s_VAO = glGenVertexArrays(1)
+        glBindVertexArray(self.s_VAO)
 
         # Inicializa VBO
-        VBO = glGenBuffers(1) 
-        glBindBuffer(GL_ARRAY_BUFFER,VBO)                 
+        # --------------
+        self.s_VBO = glGenBuffers(1) 
+        glBindBuffer(GL_ARRAY_BUFFER,self.s_VBO)                 
         glBufferData(GL_ARRAY_BUFFER,
                      self.vertices.nbytes,                   
                      self.vertices, GL_STATIC_DRAW)       
-        
-        self.texture = glGenTextures(1)
-        glBindTexture(GL_TEXTURE_2D, self.texture)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-        
-        image = Image.open(imgpath)
-        image = image.transpose(Image.FLIP_TOP_BOTTOM)
-        img_data = image.convert("RGBA").tobytes()
-        
-        glTexImage2D(GL_TEXTURE_2D,
-                     0,
-                     GL_RGBA,
-                     image.width,
-                     image.height,
-                     0,
-                     GL_RGBA,
-                     GL_UNSIGNED_BYTE,
-                     img_data)
 
-        # Setar os ponteiros dos atributos
-        glVertexAttribPointer(0,                        # pos
-                              3,                        # qtd de valores
-                              GL_FLOAT,                 # tipo de dado
-                              GL_FALSE,                 # não normalizar
-                              8*4,                      # intervalo de bytes entre atributos
-                              ctypes.c_void_p(0))       # ponteiro do primeiro attributo
-
-        # cor
-        glVertexAttribPointer(1,                        # pos
-                              3,                        # qtd de valores
-                              GL_FLOAT,                 # tipo de dado
-                              GL_FALSE,                 # não normalizar
-                              8*4,                      # intervalo de bytes entre atributos
-                              ctypes.c_void_p(3*4))     # ponteiro do segundo attributo
-
-        # textura        
-        glVertexAttribPointer(2,                        # pos
-                              2,                        # qtd de valores
-                              GL_FLOAT,                 # tipo de dado
-                              GL_FALSE,                 # não normalizar
-                              8*4,                      # intervalo de bytes entre atributos
-                              ctypes.c_void_p(6*4))     # ponteiro do segundo attributo
-
-        glEnableVertexAttribArray(0)                    # habilitar pos
-        glEnableVertexAttribArray(1)                    # habilitar cor
-        glEnableVertexAttribArray(2)                    # habilitar habilita textura
+        glEnableVertexAttribArray(0)
+        glVertexAttribPointer(0,
+                              3,
+                              GL_FLOAT,
+                              GL_FALSE,
+                              3*4,
+                              ctypes.c_void_p(0))
         
+        self.assets_faces = [
+            Image.open("assets/space_rt.png"),
+            Image.open("assets/space_lf.png"),
+            Image.open("assets/space_dn.png"),
+            Image.open("assets/space_up.png"),
+            Image.open("assets/space_bk.png"),
+            Image.open("assets/space_ft.png"),
+        ]
+        
+        self.cubemap_texture = self.load_cubemap(self.assets_faces)
+
         glBindBuffer(GL_ARRAY_BUFFER, 0)    
         glBindVertexArray(0)
 
+    def load_cubemap(self, faces: list):
+        self.texture = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_CUBE_MAP, self.texture)
+
+        for f in range(len(faces)):
+            image = faces[f].transpose(Image.FLIP_TOP_BOTTOM).convert("RGB")
+            data = image.tobytes()
+            if data:
+                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + f, 
+                             0, 
+                             GL_RGB, 
+                             image.width, 
+                             image.height,
+                             0,
+                             GL_RGB,
+                             GL_UNSIGNED_BYTE,
+                             data)
+                
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE)
+        return self.texture
+    
     def render(self, shaderId):
-        glBindVertexArray(self.VAO)
+        glBindVertexArray(self.s_VAO)
         glActiveTexture(GL_TEXTURE0)
-        glBindTexture(GL_TEXTURE_2D, self.texture)
-        glDrawArrays(GL_TRIANGLES, 0, self.qtd_vertices) ## TROCAR
+        glBindTexture(GL_TEXTURE_CUBE_MAP, self.cubemap_texture)
+        glDrawArrays(GL_TRIANGLES, 0, self.qtd_vertices)
         glBindVertexArray(0)
 
 
@@ -105,8 +140,8 @@ class Object:
                  mass = 1, # kg
                  density = 1, # g/cm³ 
                  r = 1, g = 0, b = 0,
-                 init_position = glm.vec3(0.0, 0.0, 0.0),
-                 init_velocity = glm.vec3(0.0, 0.0, 0.0),
+                 init_position = glm.vec3(0.0, 0.0, 0.0), # km
+                 init_velocity = glm.vec3(0.0, 0.0, 0.0), # km/h
                 ):
 
         self.vertices = []
@@ -253,11 +288,11 @@ class Object:
     def get_angular_momentum(self):
         result = self.mass * glm.cross(self.position, self.velocity)
         return result
-    
+ 
 
+## W.I.P
+    
 class Orbit:
-
-    
     def __init__(self, obj, r=1, g=1, b=1, nDiv = 100):
         self.vertices = [
 
@@ -274,6 +309,5 @@ class Orbit:
             z = 0.0
             self.vertices.append([x,y,z, r,g,b])
         self.qtd_vertices = len(self.qtd_vertices)
-
 
 
