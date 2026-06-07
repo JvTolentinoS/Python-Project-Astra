@@ -1,139 +1,335 @@
-                                                
-import math
 import os
+import math
 import glm                                                                      # pip install PyGLM
-from objects import Object
-from objects import Background
+import ctypes
 from OpenGL.GL import *                                                         # pip install PyOpenGL PyOpenGL_accelerate                                                
 from OpenGL.GLU import *                                                         
 from OpenGL.GLUT import *                                                       
+import numpy as np
+import constants as c
+from objects import Object
+from objects import Background
 from shader import Shader
 from camera import Camera
 
 
-# Constantes Globais
-WIDTH, HEIGHT = 1280, 720
-lastFrame = 0.0
-deltaTime = 0.0
-
-# Objetos Globais
-camera = Camera(WIDTH=1280, HEIGHT=720)
-myShader = None
+camera = None
 bdg_obj = None
 objs = []
 
-# Configurações Iniciais
+my_shader = None
+my_HDR_shader = None
+my_BLUR_shader = None
+
+hdr_FBO = None
+rbo_depth = None 
+color_buffer = None
+ping_pong_Colorbuffer = None
+ping_pong_FBO = None
+
+quadVAO = 0
+quadVBO = None  
+
+last_frame = 0.0
+delta_time = 0.0
+
+# config
 def init(): 
-    global myShader, myBgdShader, objs, bdg_obj
+    global objs, bdg_obj, camera, text_container
+    global hdr_FBO, rbo_depth, color_buffer, ping_pong_Colorbuffer, ping_pong_FBO
+    global my_shader, my_BGD_shader, my_HDR_shader, my_BLUR_shader
+
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH | GLUT_MULTISAMPLE)
+    glutInitWindowSize(c.WIDTH, c.HEIGHT)
+    glutCreateWindow(b"Project Astra") 
+
     glutSetOption(GLUT_MULTISAMPLE, 8)
-    glutInitWindowSize(WIDTH, HEIGHT)
-    glutCreateWindow(b"Project Astra")
     glEnable(GL_DEPTH_TEST)
+    
     glutSetCursor(GLUT_CURSOR_NONE)
-    glClearColor(0.0, 0.0, 0.0, 1.0)
-                                           
+    camera = Camera(c.WIDTH, c.HEIGHT)
+
+    # programas de shader
+    # -------------------
     here = os.path.dirname(os.path.abspath(__file__))                           
-    myShader = Shader(os.path.join(here, "0_vertexShader.glsl"), 
-                      os.path.join(here, "0_fragmentShader.glsl"))
-    myBgdShader = Shader(os.path.join(here, "0_bgd_vertexShader.glsl"), 
-                         os.path.join(here, "0_bgd_fragmentShader.glsl"))
+    my_shader = Shader(os.path.join(here, "shaders/0_vertexShader.glsl"), 
+                       os.path.join(here, "shaders/0_fragmentShader.glsl"))
+    my_BGD_shader = Shader(os.path.join(here, "shaders/0_bgd_vertexShader.glsl"), 
+                           os.path.join(here, "shaders/0_bgd_fragmentShader.glsl"))
+    my_HDR_shader = Shader(os.path.join(here, "shaders/0_hdr_vertexShader.glsl"),
+                           os.path.join(here, "shaders/0_hdr_fragmentShader.glsl"))
+    my_BLUR_shader = Shader(os.path.join(here, "shaders/0_blur_vertexShader.glsl"),
+                           os.path.join(here, "shaders/0_blur_fragmentShader.glsl"))
+
+
+    # frame buffer pointer
+    # --------------------
+    hdr_FBO = glGenFramebuffers(1)
+    glBindFramebuffer(GL_FRAMEBUFFER, hdr_FBO)
+    
+    # color buffer pointer e buffer pointer para bloom
+    # ------------------------------------------------
+    color_buffer = glGenTextures(2)
+    for i in range(2):
+        glBindTexture(GL_TEXTURE_2D, color_buffer[i])
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, c.WIDTH, c.HEIGHT, 0, GL_RGBA, GL_FLOAT, None)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE) # necessario para não repetir a textura
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, color_buffer[i], 0)
+
+
+    # render buffer pointer
+    # ---------------------
+    rbo_depth = glGenRenderbuffers(1)
+    glBindRenderbuffer(GL_RENDERBUFFER, rbo_depth)
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, c.WIDTH, c.HEIGHT)
+
+    # conectando os buffers
+    # ---------------------
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo_depth)
+    attachments = [GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1] 
+        
+    glDrawBuffers(2, attachments)
+
+    if glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE:
+        status = glCheckFramebufferStatus(GL_FRAMEBUFFER)
+        print(f"FRAMEBUFFER: {status}")
+    glBindFramebuffer(GL_FRAMEBUFFER, 0)
+
+    # buffer de blur
+    # --------------
+    ping_pong_FBO = glGenFramebuffers(2)
+    ping_pong_Colorbuffer = glGenTextures(2)
+
+    for i in range(2):
+        glBindFramebuffer(GL_FRAMEBUFFER, ping_pong_FBO[i])
+        glBindTexture(GL_TEXTURE_2D, ping_pong_Colorbuffer[i])
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, c.WIDTH, c.HEIGHT, 0, GL_RGBA, GL_FLOAT, None)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE) # necessario para não repetir a textura
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ping_pong_Colorbuffer[i], 0)
+        if glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE:
+            status = glCheckFramebufferStatus(GL_FRAMEBUFFER)
+            print(f"FRAMEBUFFER: {status}")
+    
+    # sampling 
+    # --------
+    my_HDR_shader.bind()
+    glUniform1i(glGetUniformLocation(my_HDR_shader.shaderId, "hdr_buffer"), 0)
+    glUniform1i(glGetUniformLocation(my_HDR_shader.shaderId, "bloom_blur"), 1)
+    my_HDR_shader.unbind()
+
+    my_BLUR_shader.bind()
+    glUniform1i(glGetUniformLocation(my_BLUR_shader.shaderId, "image"), 0)
+    my_BLUR_shader.unbind()
+
+    my_BGD_shader.bind()
+    glUniform1i(glGetUniformLocation(my_BLUR_shader.shaderId, "s_texture"), 0)
+    my_BGD_shader.unbind()
+
+    bdg_obj = Background()
+
+    # array de objetos da simulação
+    # -----------------------------
     objs = [
-        Object(initPosition=glm.vec3(1500, 0, 0), initVelocity=glm.vec3(0, 500, 0), mass=7.34e22, density=3340, r=0.5, g=0.5, b=0.5, name="Moon"),
-        Object(initPosition=glm.vec3(0, 0, 0), initVelocity=glm.vec3(0,0, 0), mass=5.97e24, density=5514, r=0.4, g=0.4, b=1, name="Earth"),
+        Object(init_position=glm.vec3(58000, 0, 0), init_velocity=glm.vec3(0, 0, 0), mass=3.30e23, density=5514, r=0.4, g=0.4, b=0.4, name="Mercury"),
+        Object(init_position=glm.vec3(10000, 0, 0), init_velocity=glm.vec3(0, 0, 0), mass=7.34e22, density=3340, r=0.5, g=0.5, b=0.5, name="Moon"),
+        Object(init_position=glm.vec3(0, 0, 0), init_velocity=glm.vec3(0, 0, 0), mass=1.989e30, density=1410, r=0.8, g=0.8, b=0.5, name="Sun", glow=True)
     ]
 
-    bdg_obj = Background("background.jpg")
-
-
-
 def simulate():
-    global objs, myShader, lastFrame, deltaTime, came
+    global objs, my_shader, last_frame, delta_time
 
-    isPaused = camera.pause
+    is_paused = camera.pause
 
-    currentFrame = glutGet(GLUT_ELAPSED_TIME) / 1000.0
-    deltaTime = currentFrame - lastFrame
-    lastFrame = currentFrame
-    if (isPaused == False):
+    if is_paused is False:
         for obj in objs:
             for obj2 in objs:
                 if obj != obj2:
-                    dx = obj2.getPosition()[0] - obj.getPosition()[0]
-                    dy = obj2.getPosition()[1] - obj.getPosition()[1]
-                    dz = obj2.getPosition()[2] - obj.getPosition()[2]
+                    dx = obj2.get_position()[0] - obj.get_position()[0]
+                    dy = obj2.get_position()[1] - obj.get_position()[1]
+                    dz = obj2.get_position()[2] - obj.get_position()[2]
                     distance = glm.sqrt(math.pow(dx, 2) + math.pow(dy, 2) + math.pow(dz, 2))
+                    
                     if distance > 0:
-                            direction = [dx / distance, 
-                                        dy / distance, 
-                                        dz / distance]
+                            direction = [
+                                dx / distance, 
+                                dy / distance, 
+                                dz / distance
+                            ]
                             
-                            distance *= 1000
-
-                            G = 6.67430e-11 # Constante gravitacional
+                            distance *= 1000 # para escalar a simulação em 3^10
                             
-                            gravF = (G * obj.mass * obj2.mass) / math.pow(distance, 2)
+                            gravF = (c.G * obj.mass * obj2.mass) / math.pow(distance, 2)
                             acc1 = gravF / obj.mass
 
-                            acc = [direction[0] * acc1,
+                            acc = [
+                                direction[0] * acc1,
                                 direction[1] * acc1,
-                                direction[2] * acc1]
+                                direction[2] * acc1
+                            ]
                             
-                            obj.accelerate(acc[0], acc[1], acc[2], dt=deltaTime)
+                            obj.accelerate(acc[0], acc[1], acc[2], dt=delta_time)
 
-                            obj.velocity *= obj.checkCollision(obj2)
+                            obj.velocity *= obj.check_collision(obj2)
 
-                            if obj.mass < obj2.mass:
-                                orbital_info = [obj2.name, distance, gravF, obj2.mass]
-                                obj.orbits.append(orbital_info)
-            obj.updatePosition(dt=deltaTime)    
-            obj.angularMomentum = obj.getAngularMomentum()
-                            
+                            # if obj.mass < obj2.mass:
+                            #    orbital_info = [obj2.name, distance, gravF, obj2.mass]
+                            #     obj.orbits.append(orbital_info)
+            obj.update_position(dt=delta_time)    
+            # obj.angular_momentum = obj.get_angular_momentum()                            
 
-
-
-# Render
 def render():
+    global last_frame, delta_time
+    global hdr_FBO, rbo_depth, color_buffer, quadVAO, ping_pong_FBO, ping_pong_Colorbuffer
+
+    current_frame = glutGet(GLUT_ELAPSED_TIME) / 1000.0
+    delta_time = current_frame - last_frame
+    last_frame = current_frame
+
+    glClearColor(0.0, 0.0, 0.0, 1.0)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-    projection = glm.perspective(glm.radians(45.0), WIDTH / HEIGHT, 0.1, 750000)
-
     
-    myBgdShader.bind()
-    glDepthMask(GL_FALSE)
-    bdg_obj.render(myShader.shaderId)
-    glDepthMask(GL_TRUE)
-    myBgdShader.unbind()
+    # renderização do skybox
+    glBindFramebuffer(GL_FRAMEBUFFER, hdr_FBO)
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    
+    # ----------------------
+    my_BGD_shader.bind()
+    glDepthFunc(GL_LEQUAL)
+    view = glm.mat4(glm.mat3(camera.get_view_matrix()))
+    my_BGD_shader.setUniformMat4("projection", glm.mat4(camera.get_projection()))
+    my_BGD_shader.setUniformMat4("view", view)
+    bdg_obj.render(my_BGD_shader.shaderId)
+    glDepthFunc(GL_LESS)
+    my_BGD_shader.unbind()
 
-    myShader.bind()
-    view = getViewMatrix()
-    myShader.setUniformMat4("projection", projection)
-    myShader.setUniformMat4("view", view)
-    myShader.setUniform("lightDir", 0.5, -1.0, 0.3)
-    myShader.setUniform("lightColor", 1.0, 1.0, 1.0)
+    # termos para o calculo de atenuação
+    # ----------------------------------
+    my_shader.bind()
+
+    my_shader.setUniform("light.constant", c.light_attenuation_constant) 
+    my_shader.setUniform("light.linear", c.light_attenuation_linear)
+    my_shader.setUniform("light.quadratic", c.light_attenuation_quadratic)
+
+    # matrizes de visualização e projeção
+    # -----------------------------------
+    my_shader.setUniformMat4("projection", camera.get_projection())
+    my_shader.setUniformMat4("view", camera.get_view_matrix())
+    
+    # uniformes de luminosidade
+    # -------------------------
+    my_shader.setUniform("lightColor", 1.0, 1.0, 1.0)
+    my_shader.setUniform("glow", 0)
+
+    # renderização dos corpos
+    # -----------------------
     for obj in objs:
-        model = glm.translate(obj.position)
-        myShader.setUniformMat4("model", model)
-        obj.render(myShader.shaderId)
-        # print(f"{obj.name} position: {obj.getPosition()} radius: {obj.radius} mass: {obj.mass} density: {obj.density}")
-        # print(f"{obj.orbits}")
-        print(f"{obj.angularMomentum}")
+        if obj.glow:
+            my_shader.setUniform("glow", 1)
+            my_shader.setUniform("radius", obj.radius)
+            my_shader.setUniformGlm("light.position", obj.position)
+            my_shader.setUniform("lightColor", 1.0, 1.0, 1.0)
+        else:
+            my_shader.setUniform("glow", 0)
 
-    myShader.unbind()
+        model = glm.translate(obj.position)
+        my_shader.setUniformMat4("model", model)
+        obj.render(my_shader.shaderId)
+        # print(f"{obj.name} position: {obj.get_position()} radius: {obj.radius} mass: {obj.mass} density: {obj.density}")
+        # print(f"{obj.orbits}")
+    my_shader.unbind()
+    glBindFramebuffer(GL_FRAMEBUFFER, 0)
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+    
+    # gaussian blur
+    # -------------
+    horizontal = True
+    first_iteration = True
+
+    my_BLUR_shader.bind()
+    glUniform1i(glGetUniformLocation(my_BLUR_shader.shaderId, "image"), 0)
+    
+    for i in range(10):
+        glBindFramebuffer(GL_FRAMEBUFFER, ping_pong_FBO[int(horizontal)])
+        my_BLUR_shader.setUniformi("horizontal", horizontal)
+        glBindTexture(GL_TEXTURE_2D, 
+                      color_buffer[1] if first_iteration else ping_pong_Colorbuffer[int(not horizontal)])
+        renderQuad()
+        horizontal = not horizontal
+        if (first_iteration):
+            first_iteration = False
+    my_BLUR_shader.unbind()
+    glBindFramebuffer(GL_FRAMEBUFFER, 0)
+
+    my_HDR_shader.bind()
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, color_buffer[0])
+    glActiveTexture(GL_TEXTURE1)
+    glBindTexture(GL_TEXTURE_2D, ping_pong_Colorbuffer[0])
+    my_HDR_shader.setUniform("exposure", c.exposure)
+    renderQuad()
+    my_HDR_shader.unbind()
     glutSwapBuffers()
 
-# View Matrix para Camera
-def getViewMatrix():
-    return camera.getViewMatrix()
 
 def reshape(width, height):
     glViewport(0, 0, width, height)
     projection = glm.perspective(glm.radians(45.0), width / height, 0.1, 100.0)
-    myShader.bind()
-    myShader.setUniformMat4("projection", projection)
-    myShader.unbind()   
+    my_shader.bind()
+    my_shader.setUniformMat4("projection", projection)
+    my_shader.unbind()   
     
+
+def renderQuad():
+    global quadVAO, quadVBO
+    if (quadVAO == 0):
+        vertices = [
+                -1.0, 1.0, 0.0,     0.0, 1.0,
+                -1.0, -1.0, 0.0,    0.0, 0.0,
+                 1.0, 1.0, 0.0,     1.0, 1.0,
+                 1.0, -1.0, 0.0,    1.0, 0.0
+        ]
+
+        vertices = np.array(vertices, dtype=np.float32)
+
+        quadVAO = glGenVertexArrays(1)
+        glBindVertexArray(quadVAO)
+
+        quadVBO = glGenBuffers(1)
+        glBindBuffer(GL_ARRAY_BUFFER, quadVBO)
+        glBufferData(GL_ARRAY_BUFFER, 
+                    vertices.nbytes,
+                    vertices, GL_STATIC_DRAW)
+        
+        glVertexAttribPointer(0, 
+                              3, 
+                              GL_FLOAT, 
+                              GL_FALSE, 
+                              5*4, 
+                              ctypes.c_void_p(0))
+        glVertexAttribPointer(1, 
+                              2, 
+                              GL_FLOAT, 
+                              GL_FALSE, 
+                              5*4, 
+                              ctypes.c_void_p(3*4))
+
+        glEnableVertexAttribArray(0)
+        glEnableVertexAttribArray(1)
+    
+    glBindVertexArray(quadVAO)
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4)
+    glBindVertexArray(0)    
+
+
 def idle():
-    camera.doMovement()                                                                     # REVISAR
+    camera.do_movement()                                                                     # REVISAR
     simulate()
     glutPostRedisplay()       
 
@@ -142,9 +338,9 @@ def main():
     init()
     glutReshapeFunc(reshape)
     glutIdleFunc(idle)
-    glutPassiveMotionFunc(camera.mouseLookCallback)
-    glutKeyboardFunc(camera.keyDownCallback)
-    glutKeyboardUpFunc(camera.keyUpCallback)
+    glutPassiveMotionFunc(camera.mouse_look_callback)
+    glutKeyboardFunc(camera.key_down_callback)
+    glutKeyboardUpFunc(camera.key_up_callback)
     glutDisplayFunc(render)
     glutMainLoop()
 

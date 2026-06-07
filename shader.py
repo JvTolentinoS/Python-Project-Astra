@@ -40,3 +40,10 @@ class Shader:
         glUniformMatrix4fv(name_loc, 1, GL_FALSE, glm.value_ptr(mat))
         return name_loc
     
+    def setUniformi(self, name, value):
+        name_loc = glGetUniformLocation(self.shaderId, name)
+        return glUniform1i(name_loc, value)
+
+    def setUniformGlm(self, name, value):
+        name_loc = glGetUniformLocation(self.shaderId, name)
+        return glUniform3fv(name_loc, 1, glm.value_ptr(value))

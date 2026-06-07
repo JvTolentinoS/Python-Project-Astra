@@ -2,32 +2,35 @@ import math
 import glm
 from OpenGL.GLUT import *  
 
+
 class Camera:
+        
+
         def __init__(self,
                     WIDTH,
                     HEIGHT,
-                    cameraPos = glm.vec3(0.0, 0.0, 2000),    # posição inicial
-                    cameraFront = glm.vec3(0.0, 0.0, -1.0), # aonde a camera está olhando
-                    cameraUp = glm.vec3(0.0, 1.0, 0.0),     # direção para cima da camera
-                    cameraRight = glm.vec3(1.0, 0.0, 0.0),  # direção lateral
+                    camera_pos = glm.vec3(0.0, 0.0, 50000.0),   
+                    camera_front = glm.vec3(0.0, 0.0, -1.0), 
+                    camera_up = glm.vec3(0.0, 1.0, 0.0),     
+                    camera_right = glm.vec3(1.0, 0.0, 0.0),  
                     yaw = -90.0,                            # horizonte de rotação                       
                     pitch = 0.0,                            # perpendicular de rotação 
-                    movementSpeed = 100):                 # velocidade do passo                         
-
-            self.cameraPos = cameraPos
-            self.cameraFront = cameraFront
-            self.cameraUp = cameraUp
-            self.cameraRight = cameraRight
+                    movement_speed = 500):                                           
+            
+            self.camera_pos = camera_pos
+            self.camera_front = camera_front
+            self.camera_up = camera_up
+            self.camera_right = camera_right
             self.yaw = yaw
             self.pitch = pitch
-            self.mouseSensitivity = 0.1
-            self.movementSpeed = movementSpeed
+            self.mouse_sensitivity = 0.1
+            self.movement_speed = movement_speed
 
             # controle de mouse
-            self.firstMouse = True
+            self.first_mouse = True
             self.ignore_warp_event = False
-            self.lastX = None
-            self.lastY = None
+            self.last_x = None
+            self.last_y = None
             
             # direção de movimento do teclado
             self.foward = False 
@@ -39,25 +42,29 @@ class Camera:
 
             # para simulação
             self.pause = False
-            self.simulationSpeed = 1
+            self.simulation_speed = 1
 
             # Tela
             self.WIDTH = WIDTH
             self.HEIGHT = HEIGHT
 
-        def getViewMatrix(self):
-            view = glm.lookAt(self.cameraPos, 
-                              self.cameraPos + 
-                              self.cameraFront, 
-                              self.cameraUp)
+            # Projeção
+            self.far = 750000.0
+            self.near = 100.0
+
+        def get_view_matrix(self):
+            view = glm.lookAt(self.camera_pos, 
+                              self.camera_pos 
+                              + self.camera_front,
+                              self.camera_up)
             return view
 
-        def processMouseMovement(self, 
-                                   xoffset, 
-                                   yoffset, 
-                                   constrain_pitch = True):
-            xoffset *= self.mouseSensitivity
-            yoffset *= self.mouseSensitivity
+        def process_mouse_movement(self, 
+                                 xoffset, 
+                                 yoffset, 
+                                 constrain_pitch = True):
+            xoffset *= self.mouse_sensitivity
+            yoffset *= self.mouse_sensitivity
 
             self.yaw += xoffset
             self.pitch += yoffset
@@ -68,62 +75,63 @@ class Camera:
                 if self.pitch < -45.0:
                     self.pitch = -45.0
 
-            self.updateCameraVectors()
+            self.update_camera_vectors()
 
-        def updateCameraVectors(self):
+        def update_camera_vectors(self):
             front = glm.vec3()
+            vec3y = glm.vec3(0.0, 1.0, 0.0)  # workaround para reduzir verbosidade do glm
+
             front.x = math.cos(glm.radians(self.yaw)) * math.cos(glm.radians(self.pitch))
             front.y = math.sin(glm.radians(self.pitch))
             front.z = math.sin(glm.radians(self.yaw)) * math.cos(glm.radians(self.pitch))
             
-            self.cameraFront = glm.normalize(front)
-            self.cameraRight = glm.normalize(glm.cross(self.cameraFront, glm.vec3(0.0, 1.0, 0.0)))
-            self.cameraUp = glm.normalize(glm.cross(self.cameraRight, self.cameraFront))
+            self.camera_front = glm.normalize(front)
+            self.camera_right = glm.normalize(glm.cross(self.camera_front, vec3y))
+            self.camera_up = glm.normalize(glm.cross(self.camera_right, self.camera_front))
         
-        def processKeyboard(self, direction, deltaTime = 1):
-            velocity = self.movementSpeed * deltaTime
+        def process_keyboard(self, direction, deltaTime = 1):
+            velocity = self.movement_speed * deltaTime
             if direction == "FOWARD":
-                self.cameraPos += self.cameraFront * velocity
+                self.camera_pos += self.camera_front * velocity
             if direction == "BACKWARD":
-                self.cameraPos -= self.cameraFront * velocity
+                self.camera_pos -= self.camera_front * velocity
             if direction == "LEFT":
-                self.cameraPos -= self.cameraRight * velocity
+                self.camera_pos -= self.camera_right * velocity
             if direction == "RIGHT":
-                self.cameraPos += self.cameraRight * velocity
+                self.camera_pos += self.camera_right * velocity
             if direction == "UP":
-                self.cameraPos += self.cameraUp * velocity
+                self.camera_pos += self.camera_up * velocity
             if direction == "DOWN":
-                self.cameraPos -= self.cameraUp * velocity
+                self.camera_pos -= self.camera_up * velocity
 
-                # Mouse Input/Tracking
-        
-        def mouseLookCallback(self, xpos, ypos):
+        # Mouse Input/Tracking
+        def mouse_look_callback(self, xpos, ypos):
 
             HEIGHT_MIDDLE_POINT, WIDTH_MIDDLE_POINT = int(self.HEIGHT / 2), int(self.WIDTH / 2)
 
             if self.ignore_warp_event:
                 self.ignore_warp_event = False
-                self.lastX = WIDTH_MIDDLE_POINT
-                self.lastY = HEIGHT_MIDDLE_POINT
+                self.last_X = WIDTH_MIDDLE_POINT
+                self.last_y = HEIGHT_MIDDLE_POINT
                 return
 
-            if self.firstMouse:
-                self.lastX = xpos
-                self.lastY = ypos
-                self.firstMouse = False
+            if self.first_mouse:
+                self.last_X = xpos
+                self.last_y = ypos
+                self.first_mouse = False
 
-            xoffset = xpos - self.lastX
-            yoffset = self.lastY - ypos
+            xoffset = xpos - self.last_X
+            yoffset = self.last_y - ypos
 
-            self.processMouseMovement(xoffset, yoffset)
+            self.process_mouse_movement(xoffset, yoffset)
 
-            self.lastX = WIDTH_MIDDLE_POINT
-            self.lastY = HEIGHT_MIDDLE_POINT
+            self.last_X = WIDTH_MIDDLE_POINT
+            self.last_y = HEIGHT_MIDDLE_POINT
             self.ignore_warp_event = True
             glutWarpPointer(WIDTH_MIDDLE_POINT, HEIGHT_MIDDLE_POINT)
 
         # Key Down
-        def keyDownCallback(self, key, x, y):
+        def key_down_callback(self, key, x, y):
 
             if key == b"w" or key == b'W':
                 self.foward = True
@@ -138,22 +146,23 @@ class Camera:
             if key == b"e" or key == b'E':
                 self.down = True
             if key == b"p" or key == b'P':
-                if self.pause == False:
+                if not self.pause:
                     self.pause = True
                 else: 
                     self.pause = False 
             if key == b"+":
-                if self.simulationSpeed == 0.5:
-                    self.simulationSpeed += 0.5
+                if self.simulation_speed == 0.5:
+                    self.simulation_speed += 0.5
                 else:
-                    self.simulationSpeed += 1
+                    self.simulation_speed += 1
             if key == b"-":
-                if self.simulationSpeed >= 1:
-                    self.simulationSpeed -= 0.5
+                if self.simulation_speed >= 1:
+                    self.simulation_speed -= 0.5
                 else:
-                    self.simulationSpeed -= 0
+                    self.simulation_speed -= 0
+
         # Key Release
-        def keyUpCallback(self, key, x, y):
+        def key_up_callback(self, key, x, y):
 
             if key == b"w" or key == b'W':
                 self.foward = False
@@ -169,16 +178,22 @@ class Camera:
                 self.down = False
 
         # Movimento de Teclado 
-        def doMovement(self):
+        def do_movement(self):
             if self.foward:
-                self.processKeyboard("FOWARD")
+                self.process_keyboard("FOWARD")
             if self.backward:
-                self.processKeyboard("BACKWARD")
+                self.process_keyboard("BACKWARD")
             if self.right:
-                self.processKeyboard("RIGHT")
+                self.process_keyboard("RIGHT")
             if self.left:
-                self.processKeyboard("LEFT")
+                self.process_keyboard("LEFT")
             if self.up:
-                self.processKeyboard("UP")
+                self.process_keyboard("UP")
             if self.down:
-                self.processKeyboard("DOWN")
+                self.process_keyboard("DOWN")
+
+        def get_projection(self):
+            return glm.perspective(glm.radians(45.0), 
+                                   self.WIDTH / self.HEIGHT, 
+                                   self.near, self.far)
+            
