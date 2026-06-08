@@ -29,7 +29,7 @@ void main(){
 
     if (glow) { 
     a_frag_color = vec4(f_color, 1.0);
-    vec3 result = f_color * 100;
+    vec3 result = f_color * 0.5;
     bright_color = vec4(result, 1.0);
 
     } else {
@@ -44,7 +44,7 @@ void main(){
     vec3 result = diffuse * f_color;
 
     float brightness = dot(result, vec3 (0.2126, 0.7152, 0.0722));
-        if (brightness > 1){
+        if (brightness > 0.1){
             bright_color = vec4(result, 1.0);
         } else {
             bright_color = vec4(0.0, 0.0, 0.0, 1);

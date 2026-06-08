@@ -2,14 +2,15 @@ import math
 import glm
 from OpenGL.GLUT import *  
 
-
 class Camera:
         
-
+        
+        current_speed = 0.0
+        
         def __init__(self,
                     WIDTH,
                     HEIGHT,
-                    camera_pos = glm.vec3(0.0, 0.0, 50000.0),   
+                    camera_pos = glm.vec3(0.0, 0.0, 0.0),   
                     camera_front = glm.vec3(0.0, 0.0, -1.0), 
                     camera_up = glm.vec3(0.0, 1.0, 0.0),     
                     camera_right = glm.vec3(1.0, 0.0, 0.0),  
@@ -25,7 +26,7 @@ class Camera:
             self.pitch = pitch
             self.mouse_sensitivity = 0.1
             self.movement_speed = movement_speed
-
+            
             # controle de mouse
             self.first_mouse = True
             self.ignore_warp_event = False
@@ -41,8 +42,11 @@ class Camera:
             self.down = False
 
             # para simulação
+            self.objs_list = []
             self.pause = False
-            self.simulation_speed = 1
+            self.current_speed = 0
+            self.selector = False
+            self.target_pointer = 0
 
             # Tela
             self.WIDTH = WIDTH
@@ -148,20 +152,27 @@ class Camera:
             if key == b"p" or key == b'P':
                 if not self.pause:
                     self.pause = True
+                    print("Pausado")
                 else: 
-                    self.pause = False 
+                    self.pause = False
+                    print("Despausado") 
             if key == b"+":
-                if self.simulation_speed == 0.5:
-                    self.simulation_speed += 0.5
-                else:
-                    self.simulation_speed += 1
+                if Camera.current_speed < 5.0:
+                    Camera.current_speed += 1.0 
             if key == b"-":
-                if self.simulation_speed >= 1:
-                    self.simulation_speed -= 0.5
+                if Camera.current_speed > 1.0:
+                    Camera.current_speed -= 1.0
+            if key == b"o" or key == b"O": # selector
+                if self.target_pointer < len(self.objs_list):
+                    self.selector = True
+                    self.select_target(self.objs_list)
+                    self.target_pointer += 1
                 else:
-                    self.simulation_speed -= 0
+                    self.target_pointer = 0
 
         # Key Release
+        
+        # Key Up
         def key_up_callback(self, key, x, y):
 
             if key == b"w" or key == b'W':
@@ -191,6 +202,21 @@ class Camera:
                 self.process_keyboard("UP")
             if self.down:
                 self.process_keyboard("DOWN")
+
+        # Selector
+        def select_target(self, objs = list):
+            if self.selector:
+                object_position = objs[self.target_pointer].get_position()
+                object_radius = objs[self.target_pointer].radius
+                x = object_position[0] + 4*object_radius 
+                y = object_position[1]
+                z = object_position[2]
+                
+                self.camera_pos = glm.vec3(x, y, z)
+
+                print(f"\n# Nome: {objs[self.target_pointer].name} \n" + f"# Massa: {objs[self.target_pointer].mass} kg \n" + f"# Raio: {int(objs[self.target_pointer].radius * 30)} km")
+
+                
 
         def get_projection(self):
             return glm.perspective(glm.radians(45.0), 

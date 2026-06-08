@@ -137,10 +137,13 @@ def init():
     # array de objetos da simulação
     # -----------------------------
     objs = [
-        Object(init_position=glm.vec3(58000, 0, 0), init_velocity=glm.vec3(0, 0, 0), mass=3.30e23, density=5514, r=0.4, g=0.4, b=0.4, name="Mercury"),
-        Object(init_position=glm.vec3(10000, 0, 0), init_velocity=glm.vec3(0, 0, 0), mass=7.34e22, density=3340, r=0.5, g=0.5, b=0.5, name="Moon"),
-        Object(init_position=glm.vec3(0, 0, 0), init_velocity=glm.vec3(0, 0, 0), mass=1.989e30, density=1410, r=0.8, g=0.8, b=0.5, name="Sun", glow=True)
+        Object(init_position=glm.vec3(57910, 0, 0), init_velocity=glm.vec3(0.0, 0.0, 4000.0), mass=3.30e23, density=5514, r=0.4, g=0.4, b=0.4, name="Mercury"),
+        Object(init_position=glm.vec3(0, 0, 0), init_velocity=glm.vec3(0.0, 0.0, 0.0), mass=1.989e30, density=1410, r=0.8, g=0.8, b=0.5, name="Sun", glow=True),
+
     ]
+    # para o seletor
+    # --------------
+    camera.objs_list = objs
 
 def simulate():
     global objs, my_shader, last_frame, delta_time
@@ -157,32 +160,50 @@ def simulate():
                     distance = glm.sqrt(math.pow(dx, 2) + math.pow(dy, 2) + math.pow(dz, 2))
                     
                     if distance > 0:
-                            direction = [
-                                dx / distance, 
-                                dy / distance, 
-                                dz / distance
+                        direction = [
+                            dx / distance, 
+                            dy / distance, 
+                            dz / distance
+                        ]
+                            
+                        distance *= 1000 # para escalar a simulação em 3^10
+                            
+                        gravF = (c.G * obj.mass * obj2.mass) / math.pow(distance, 2)
+                        acc1 = gravF / obj.mass
+
+                        acc = [
+                            direction[0] * acc1,
+                            direction[1] * acc1,
+                            direction[2] * acc1
+                        ]
+                            
+                        obj.accelerate(acc[0], acc[1], acc[2], dt=delta_time)
+
+                        obj.velocity *= obj.check_collision(obj2)
+                        
+                        if obj.mass < obj2.mass:
+                            orbital_info = [
+                                obj2.name, 
+                                distance, 
+                                gravF, 
+                                obj2.mass, 
+                                obj2.velocity,
+                                obj2.position,
                             ]
-                            
-                            distance *= 1000 # para escalar a simulação em 3^10
-                            
-                            gravF = (c.G * obj.mass * obj2.mass) / math.pow(distance, 2)
-                            acc1 = gravF / obj.mass
-
-                            acc = [
-                                direction[0] * acc1,
-                                direction[1] * acc1,
-                                direction[2] * acc1
-                            ]
-                            
-                            obj.accelerate(acc[0], acc[1], acc[2], dt=delta_time)
-
-                            obj.velocity *= obj.check_collision(obj2)
-
-                            # if obj.mass < obj2.mass:
-                            #    orbital_info = [obj2.name, distance, gravF, obj2.mass]
-                            #     obj.orbits.append(orbital_info)
-            obj.update_position(dt=delta_time)    
-            # obj.angular_momentum = obj.get_angular_momentum()                            
+                            is_registered = False
+                                
+                            if len(obj.orbits) == 0:
+                                obj.orbits.append(orbital_info)
+                                is_registered = True
+                            else:
+                                for i in range(len(obj.orbits)):
+                                    if obj.orbits[i][0] == orbital_info[0]:
+                                        is_registered = True
+                            if not is_registered:
+                                obj.orbits.append(orbital_info)
+                                   
+            obj.update_position(dt=delta_time)
+            obj.get_eccentricity_vector()                          
 
 def render():
     global last_frame, delta_time
@@ -254,7 +275,6 @@ def render():
 
     my_BLUR_shader.bind()
     glUniform1i(glGetUniformLocation(my_BLUR_shader.shaderId, "image"), 0)
-    
     for i in range(10):
         glBindFramebuffer(GL_FRAMEBUFFER, ping_pong_FBO[int(horizontal)])
         my_BLUR_shader.setUniformi("horizontal", horizontal)
@@ -272,7 +292,7 @@ def render():
     glBindTexture(GL_TEXTURE_2D, color_buffer[0])
     glActiveTexture(GL_TEXTURE1)
     glBindTexture(GL_TEXTURE_2D, ping_pong_Colorbuffer[0])
-    my_HDR_shader.setUniform("exposure", c.exposure)
+    my_HDR_shader.setUniform("exposure", c.EXPOSURE)
     renderQuad()
     my_HDR_shader.unbind()
     glutSwapBuffers()
