@@ -134,7 +134,7 @@ class Background:
 
 
 class Object:
-
+    
     def __init__(self,
                  name="Object",
                  glow = False,
@@ -158,8 +158,10 @@ class Object:
         self.mass = mass
         self.density = density
         self.name = name
-        self.eccentricity = self.get_eccentricity_vector()
         
+        # 
+        self.eccentricity = self.get_eccentricity_vector()
+        self.main_attractor_pos = glm.vec3(0.0, 0.0, 0.0)
         for i in range(self.stacks):
             theta1 = (i / self.stacks) * glm.pi()
             theta2 = (i + 1) / self.stacks * glm.pi()
@@ -259,17 +261,18 @@ class Object:
         glBindVertexArray(0)
 
     def update_position(self, dt):
-        self.position[0] += self.velocity[0] * dt * (c.SIMULATION_SPEED * (1 + Camera.current_speed))
-        self.position[1] += self.velocity[1] * dt * (c.SIMULATION_SPEED * (1 + Camera.current_speed))
-        self.position[2] += self.velocity[2] * dt * (c.SIMULATION_SPEED * (1 + Camera.current_speed))
+        self.position[0] += self.velocity[0] * dt
+        self.position[1] += self.velocity[1] * dt
+        self.position[2] += self.velocity[2] * dt
 
     def get_position(self):
         return self.position
     
     def accelerate(self, x, y, z, dt):
-        self.velocity[0] += x * dt * (c.SIMULATION_SPEED * (1 + Camera.current_speed))
-        self.velocity[1] += y * dt * (c.SIMULATION_SPEED * (1 + Camera.current_speed))
-        self.velocity[2] += z * dt * (c.SIMULATION_SPEED * (1 + Camera.current_speed))
+        
+        self.velocity[0] += x * dt
+        self.velocity[1] += y * dt
+        self.velocity[2] += z * dt
     
     def new_radius(self, mass):
         self.radius = math.cbrt(3 * mass / (4 * math.pi * self.density)) / 30000 # redução de escala
@@ -284,7 +287,7 @@ class Object:
         if (other.radius + self.radius) > distance:
             return -0.2
         return 1
-
+    
     def get_angular_momentum(self, r2, v2):
         r1 = self.position - r2
         v1 = self.velocity - v2 
@@ -292,7 +295,7 @@ class Object:
         return result
     
     def get_gravitational_parameter(self, M):
-        return c.G * (M + self.mass)
+        return (c.G * (M + self.mass)) / c.SCALE_KM2
            
     def get_velocity_vec(self, v2):
         return self.velocity - v2
@@ -301,8 +304,13 @@ class Object:
         r1 = self.position - r2
         return glm.normalize(r1)
 
+    def get_main_attractor_pos(self):
+        if self.orbits:
+            main_body = max(self.orbits, key=lambda orbit: orbit[2])
+            return main_body[5]
+    
     def get_eccentricity_vector(self):
-        if len(self.orbits) > 0:  
+        if self.orbits:  
             main_body = max(self.orbits, key=lambda orbit: orbit[2])
             
             main_mass = main_body[3]
@@ -316,29 +324,95 @@ class Object:
             
             eccentricity_vector = glm.cross(v_vector, h_momentum) / u_parameter - n_pos
             
-            print(f"\nVELOCIDADE RADIAL {glm.dot(v_vector, n_pos)} | POSIÇÃO {self.position}")
+            print(f"\nVELOCIDADE RADIAL {glm.dot(v_vector, n_pos)} |\n POSIÇÃO {self.position} |\n e: {eccentricity_vector} ")
             return eccentricity_vector
         return
 
+    def get_semi_major_axis(self):
+        if len(self.orbits) > 0: 
+            main_body = max(self.orbits, key=lambda orbit: orbit[2])
+            
+            main_mass = main_body[3]
+            r = glm.length(self.position - main_body[5])
+            v2 = glm.length(self.velocity)
+            u_parameter = self.get_gravitational_parameter(main_mass)
+            
+            specific_energy = math.pow(v2, 2)/2 - u_parameter/r
+            semi_axis = -u_parameter / (2 * specific_energy)
+            
+            return semi_axis
+        return
+            
 ## W.I.P
-    
 class Orbit:
-    def __init__(self, obj, r=1, g=1, b=1, nDiv = 100):
+    def __init__(self, obj, r = 1, g = 1, b = 1, nDiv = 200):
 
         self.vertices = [
 
         ]
-
-        epsilon = 0
+        self.main_attractor_pos = obj.get_main_attractor_pos()
+        self.get_obj_pos = obj.get_position()
+        semi_major_axis = obj.get_semi_major_axis()
+        epsilon = glm.length(obj.get_eccentricity_vector())
         deltaAngle = 2*math.pi/nDiv
 
-        
         for i in range(nDiv):
-            angle = i*deltaAngle
-            x = r * math.cos(math.radians(angle)) / 1 + epsilon * math.cos(math.radians(angle))
-            y = r * math.sin(math.radians(angle)) / 1 + epsilon * math.cos(math.radians(angle))
-            z = 0.0
+            angle = i * deltaAngle
+            radius = semi_major_axis * (1 - math.pow(epsilon, 2)) / (1 + epsilon * math.cos(angle))
+            
+            x = self.main_attractor_pos[0] + radius * math.cos(angle)
+            y = self.main_attractor_pos[1] + radius * math.sin(angle)
+            z = self.main_attractor_pos[2]
             self.vertices.append([x,y,z, r,g,b])
-        self.qtd_vertices = len(self.qtd_vertices)
+            
+        self.qtd_vertices = len(self.vertices)
+        self.vertices = np.array(self.vertices, dtype=np.float32)
+        
+        self.VAO = glGenVertexArrays(1)
+        glBindVertexArray(self.VAO)
+        
+        self.VBO = glGenBuffers(1)
+        glBindBuffer(GL_ARRAY_BUFFER,
+                     self.VBO)
+        glBufferData(GL_ARRAY_BUFFER,
+                     self.vertices, GL_STATIC_DRAW)
+        
+        glVertexAttribPointer(0,
+                              3,
+                              GL_FLOAT,
+                              GL_FALSE,
+                              6*4,
+                              ctypes.c_void_p(0))
 
-
+        
+        glVertexAttribPointer(1,
+                              3,
+                              GL_FLOAT,
+                              GL_FALSE,
+                              6*4,
+                              ctypes.c_void_p(3*4))
+        
+        glEnableVertexAttribArray(0)
+        glEnableVertexAttribArray(1)
+        
+        glBindBuffer(GL_ARRAY_BUFFER, 0)
+        glBindVertexArray(0)
+    
+    def get_rotation(self):
+        vmat4 = glm.mat4(1.0)
+        
+        source = self.main_attractor_pos
+        target = self.get_obj_pos
+        
+        vec_direction = source - target
+        vec_angle = math.atan2(vec_direction.y, vec_direction.x)
+        
+        vec_rotation = glm.vec3(0.0, 1.0, 0.0)
+        return glm.rotate(vmat4, vec_angle, vec_rotation)
+    
+    def render(self, shaderId):
+        glBindVertexArray(self.VAO)
+        glDrawArrays(GL_LINE_LOOP, 0, self.qtd_vertices)
+        glBindVertexArray(0)
+            
+        
