@@ -6,13 +6,15 @@ import numpy as np
 from OpenGL.GL import *
 from OpenGL.GLUT import *
 import glm
+import constants as c
+from camera import Camera
 
 
 class Background:
 
 
     def __init__(self):
-
+        
         self.skybox_vertices = [
             # pos
             -1.0,  1.0, -1.0,
@@ -133,7 +135,6 @@ class Background:
 
 class Object:
 
-
     def __init__(self,
                  name="Object",
                  glow = False,
@@ -157,9 +158,8 @@ class Object:
         self.mass = mass
         self.density = density
         self.name = name
-        self.distance = 0
-        self.angular_momentum = self.get_angular_momentum()
-
+        self.eccentricity = self.get_eccentricity_vector()
+        
         for i in range(self.stacks):
             theta1 = (i / self.stacks) * glm.pi()
             theta2 = (i + 1) / self.stacks * glm.pi()
@@ -259,19 +259,19 @@ class Object:
         glBindVertexArray(0)
 
     def update_position(self, dt):
-        self.position[0] += self.velocity[0]*dt
-        self.position[1] += self.velocity[1]*dt
-        self.position[2] += self.velocity[2]*dt
+        self.position[0] += self.velocity[0] * dt * (c.SIMULATION_SPEED * (1 + Camera.current_speed))
+        self.position[1] += self.velocity[1] * dt * (c.SIMULATION_SPEED * (1 + Camera.current_speed))
+        self.position[2] += self.velocity[2] * dt * (c.SIMULATION_SPEED * (1 + Camera.current_speed))
 
     def get_position(self):
         return self.position
     
     def accelerate(self, x, y, z, dt):
-        self.velocity[0] += x*dt
-        self.velocity[1] += y*dt
-        self.velocity[2] += z*dt
+        self.velocity[0] += x * dt * (c.SIMULATION_SPEED * (1 + Camera.current_speed))
+        self.velocity[1] += y * dt * (c.SIMULATION_SPEED * (1 + Camera.current_speed))
+        self.velocity[2] += z * dt * (c.SIMULATION_SPEED * (1 + Camera.current_speed))
     
-    def recalculate_radius(self, mass):
+    def new_radius(self, mass):
         self.radius = math.cbrt(3 * mass / (4 * math.pi * self.density)) / 30000 # redução de escala
 
     def check_collision(self, other):
@@ -285,15 +285,46 @@ class Object:
             return -0.2
         return 1
 
-    def get_angular_momentum(self):
-        result = self.mass * glm.cross(self.position, self.velocity)
+    def get_angular_momentum(self, r2, v2):
+        r1 = self.position - r2
+        v1 = self.velocity - v2 
+        result = glm.cross(r1, v1)
         return result
- 
+    
+    def get_gravitational_parameter(self, M):
+        return c.G * (M + self.mass)
+           
+    def get_velocity_vec(self, v2):
+        return self.velocity - v2
+        
+    def get_normal_pos(self, r2):
+        r1 = self.position - r2
+        return glm.normalize(r1)
+
+    def get_eccentricity_vector(self):
+        if len(self.orbits) > 0:  
+            main_body = max(self.orbits, key=lambda orbit: orbit[2])
+            
+            main_mass = main_body[3]
+            r2 = main_body[5]
+            v2 = main_body[4]
+            
+            v_vector = self.get_velocity_vec(v2)
+            h_momentum = self.get_angular_momentum(r2, v2)
+            n_pos = self.get_normal_pos(r2)
+            u_parameter = self.get_gravitational_parameter(main_mass)
+            
+            eccentricity_vector = glm.cross(v_vector, h_momentum) / u_parameter - n_pos
+            
+            print(f"\nVELOCIDADE RADIAL {glm.dot(v_vector, n_pos)} | POSIÇÃO {self.position}")
+            return eccentricity_vector
+        return
 
 ## W.I.P
     
 class Orbit:
     def __init__(self, obj, r=1, g=1, b=1, nDiv = 100):
+
         self.vertices = [
 
         ]
