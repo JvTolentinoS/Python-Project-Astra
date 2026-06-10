@@ -3,8 +3,14 @@ import OpenGL.GL.shaders as gls
 import glm
 
 class Shader: 
+    """
+    OpenGL requisita utilizar os programas de Vertex Shader e Fragment Shaders para
+    gerar os fragmentos e vértices através da linguagem GLSL (OpenGL Shading Language),
+    a biblioteca gls permite compilar a referência esses shaders e validar posteriormente.
+    """
+    
     def __init__(self, vertexShaderFileName, fragmentShaderFileName):
-        with open(vertexShaderFileName, "r") as file:                   # OpenGL moderno requer escrever os Shaders.
+        with open(vertexShaderFileName, "r") as file:                   
             vsSource = file.read()
         with open(fragmentShaderFileName, "r") as file:
             fsSource = file.read()
@@ -14,19 +20,31 @@ class Shader:
         self.shaderId = gls.compileProgram(vsId, fsId)
 
     def bind(self):
+        """
+        Instala o programa de Shader definido na Instância para o estado de renderização.
+        """
         glUseProgram(self.shaderId)
     
     def unbind(self):
+        """
+        Esvazia o programa de Shader definidos na Instância no estado de renderização.
+        """
         glUseProgram(0)
 
-    def setUniform(self, name, x, y=None, z=None, w=None):              ## facilta um pouco o encapsulamento da cpu pra gpu
+    def setUniform(self, name, x, y=None, z=None, w=None):              
+        """
+        Encapsula os uniformes, com exceção dos uniformes. Não encapsula mat e vecs.
+        """
         name_loc = glGetUniformLocation(self.shaderId, name)
         if y == None: glUniform1f(name_loc, x)
         elif z == None: glUniform2f(name_loc, x, y)
         elif w == None: glUniform3f(name_loc, x, y, z)
         else:         glUniform4f(name_loc, x, y, z, w)
 
-    def setUniformv(self, name, value):                                 ## nesse caso é para listas
+    def setUniformv(self, name, value):
+        """
+        Encapsula os uniformes de vec2, vec3 e vec4.
+        """
         name_loc = glGetUniformLocation(self.shaderId, name)
         if len(value) == 1: glUniform1fv(name_loc, 1, value)
         elif len(value) == 2: glUniform2fv(name_loc, 1, value)
@@ -34,6 +52,9 @@ class Shader:
         else: glUniform4fv(name_loc, 1, value)
 
     def setUniformMat4(self, name, mat):
+        """
+        Encapsula os uniformes de mat4x4
+        """
         name_loc = glGetUniformLocation(self.shaderId, name)
         if name_loc == -1:
             return name_loc
@@ -41,9 +62,15 @@ class Shader:
         return name_loc
     
     def setUniformi(self, name, value):
+        """
+        Encapsula os uniformes booleanos
+        """
         name_loc = glGetUniformLocation(self.shaderId, name)
         return glUniform1i(name_loc, value)
 
     def setUniformGlm(self, name, value):
+        """
+        Encapsula os uniformes booleanos não númericos.
+        """
         name_loc = glGetUniformLocation(self.shaderId, name)
         return glUniform3fv(name_loc, 1, glm.value_ptr(value))
