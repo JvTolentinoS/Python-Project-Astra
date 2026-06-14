@@ -6,7 +6,7 @@ class Shader:
     """
     OpenGL requisita utilizar os programas de Vertex Shader e Fragment Shaders para
     gerar os fragmentos e vértices através da linguagem GLSL (OpenGL Shading Language),
-    a biblioteca gls permite compilar a referência esses shaders e validar posteriormente.
+    a biblioteca gls permite compilar a referência desses shaders e os validar posteriormente.
     """
     
     def __init__(self, vertexShaderFileName, fragmentShaderFileName):

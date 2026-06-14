@@ -2,6 +2,8 @@ import math
 import glm
 from OpenGL.GLUT import *  
 import constants as c
+
+
 class Camera:
         
         
@@ -115,8 +117,6 @@ class Camera:
 
             if self.ignore_warp_event:
                 self.ignore_warp_event = False
-                self.last_x = WIDTH_MIDDLE_POINT
-                self.last_y = HEIGHT_MIDDLE_POINT
                 return
 
             if self.first_mouse:
@@ -206,17 +206,16 @@ class Camera:
         # Selector
         def select_target(self, objs = list):
             if self.selector:
-                object_position = objs[self.target_pointer].get_position()
+                object_position = objs[self.target_pointer].position
                 object_radius = objs[self.target_pointer].radius
                 x = object_position[0]  
                 y = object_position[1]
                 z = object_position[2] + 4*object_radius
                 
                 self.camera_pos = glm.vec3(x, y, z)
-
-                print(f"\n# Nome: {objs[self.target_pointer].name} \n" + f"# Massa: {objs[self.target_pointer].mass} kg \n" + f"# Raio: {int(objs[self.target_pointer].radius * (c.RADII_SCALE)/1000)} km")
-
-            
+                print(objs[self.target_pointer].read_asdict)
+                #   print(f"\n# Nome: {objs[self.target_pointer].name} \n" + f"# Massa: {objs[self.target_pointer].mass} kg \n" + f"# Raio: {int(objs[self.target_pointer].radius * (c.RADII_SCALE)/1000)} km")
+                
         def get_projection(self):
             return glm.perspective(glm.radians(45.0), 
                                    self.WIDTH / self.HEIGHT, 

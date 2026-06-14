@@ -5,7 +5,7 @@ import ctypes
 from OpenGL.GL import *                                                         # pip install PyOpenGL PyOpenGL_accelerate
 from OpenGL.GLU import *
 from OpenGL.GLUT import *
-import numpy as np
+import numpy as np                                                             
 import system_dict as sys_dic
 import constants as c
 import objects as o_func
@@ -166,12 +166,12 @@ def init():
     # dicionário de objetos da simulação
     # -----------------------------
     system_obj_list = [Object(name=key, **value) for key, value in sys_dic.system_obj_dict.items()]
-    
     camera.objs_list = system_obj_list
 
 # Lógica de Simulação
 # -------------------
 def simulate():
+    
     global system_obj_list, orbits
     global last_frame, delta_time
     
@@ -184,34 +184,28 @@ def simulate():
             
             for obj2 in system_obj_list:
                 if obj != obj2:
-                    dx = obj2.get_position()[0] - obj.get_position()[0]
-                    dy = obj2.get_position()[1] - obj.get_position()[1]
-                    dz = obj2.get_position()[2] - obj.get_position()[2]
-                    distance = glm.sqrt(math.pow(dx, 2) + math.pow(dy, 2) + math.pow(dz, 2))
-
+                    vec_dist = obj2.position - obj.position
+                    distance = glm.distance(obj2.position, obj.position)
                     if distance > 0:
-                        direction = glm.vec3(dx / distance, 
-                                             dy / distance, 
-                                             dz / distance)
+                        direction = glm.vec3(vec_dist) / distance
                         distance *= c.SIMULATION_DISTANCE_SCALED
                         distance *= c.SCALE_KM 
-                        gravF = (c.G * obj.mass * obj2.mass) / math.pow(distance, 2)
-                        acc1 = (gravF / obj.mass) / c.SCALE_KM
+                        
+                        gravF = (c.G * obj._mass * obj2._mass) / math.pow(distance, 2)
+                        acc1 = (gravF / obj._mass) / c.SCALE_KM
+                        
                         t_accs += direction * acc1
-                        o_func.define_rel(obj, obj2)
                         
                 accs[obj] = t_accs
             
         for obj in system_obj_list: 
-            obj.accelerate(accs[obj].x,
-                            accs[obj].y,
-                            accs[obj].z,
-                            delta_time)
+            obj.accelerate(accs[obj], delta_time)
+            obj.update_velocity_scaled()
             
         for obj in system_obj_list:
             for obj2 in system_obj_list:
                 if obj != obj2:
-                    obj.velocity *= obj.check_collision(obj2)
+                    obj._velocity *= obj.check_collision(obj2)
                         
         for obj in system_obj_list:
             obj.update_position(delta_time)
@@ -222,9 +216,8 @@ def simulate():
                 if obj != obj2:
                     o_func.define_rel(obj, obj2)
                     
-        
         for obj in system_obj_list:
-            obj.chain_function(delta_time, orbits)
+            obj.chain_function(orbits)
 
 def render():
     global last_frame, delta_time
@@ -282,22 +275,24 @@ def render():
     for obj in system_obj_list:
         if obj.glow:
             my_shader.setUniform("glow", 1)
-            my_shader.setUniform("radius", obj.radius)
-            my_shader.setUniformGlm("light.position", obj.position)
+            my_shader.setUniform("radius", obj._radius)
+            my_shader.setUniformGlm("light.position", obj._position)
             my_shader.setUniform("lightColor", 1.0, 1.0, 1.0)
         else:
             my_shader.setUniform("glow", 0)
 
-        model = glm.translate(obj.position)
+        model = glm.translate(obj._position)
         my_shader.setUniformMat4("model", model)
         obj.render(my_shader.shaderId)
-        
-    if orbits:
-        for obj in orbits:
-            obj.render(my_shader.shaderId)
 
     my_shader.unbind()
 
+    my_shader.bind()
+    if orbits:
+        for obj in orbits:
+            obj.render(my_shader.shaderId)
+    my_shader.unbind
+    
     glDisable(GL_MULTISAMPLE)
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa_FBO)
@@ -330,6 +325,8 @@ def render():
         if (first_iteration):
             first_iteration = False
     my_BLUR_shader.unbind()
+    
+    
     glBindFramebuffer(GL_FRAMEBUFFER, 0)
 
     my_HDR_shader.bind()
@@ -340,6 +337,8 @@ def render():
     my_HDR_shader.setUniform("exposure", c.EXPOSURE)
     renderQuad()
     my_HDR_shader.unbind()
+    
+    
     glutSwapBuffers()
 
 def reshape(width, height):
@@ -348,15 +347,15 @@ def reshape(width, height):
     my_shader.bind()
     my_shader.setUniformMat4("projection", projection)
     my_shader.unbind()
-
+    
 def renderQuad():
     global quadVAO, quadVBO
     if (quadVAO == 0):
         verts = [
                 -1.0, 1.0, 0.0,     0.0, 1.0,
-                -1.0, -1.0, 0.0,    0.0, 0.0,
+                -1.0,-1.0, 0.0,    0.0, 0.0,
                  1.0, 1.0, 0.0,     1.0, 1.0,
-                 1.0, -1.0, 0.0,    1.0, 0.0
+                 1.0,-1.0, 0.0,    1.0, 0.0
         ]
 
         verts = np.array(verts, dtype=np.float32)
@@ -376,6 +375,7 @@ def renderQuad():
                               GL_FALSE,
                               5*4,
                               ctypes.c_void_p(0))
+        
         glVertexAttribPointer(1,
                               2,
                               GL_FLOAT,
