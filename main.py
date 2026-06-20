@@ -10,11 +10,11 @@ import system_dict as sys_dic
 import constants as c
 import objects as o_func
 from objects import Object
+from objects import Barycenter
 from objects import Orbit
 from objects import Skybox
 from shader import Shader
 from camera import Camera
-
 
 camera = None
 bdg_obj = None
@@ -167,6 +167,7 @@ def init():
     # -----------------------------
     system_obj_list = [Object(name=key, **value) for key, value in sys_dic.system_obj_dict.items()]
     camera.objs_list = system_obj_list
+    camera.orb_list = orbits
 
 # Lógica de Simulação
 # -------------------
@@ -197,7 +198,7 @@ def simulate():
                         t_accs += direction * acc1
                         
                 accs[obj] = t_accs
-            
+        
         for obj in system_obj_list: 
             obj.accelerate(accs[obj], delta_time)
             obj.update_velocity_scaled()
@@ -216,6 +217,16 @@ def simulate():
                 if obj != obj2:
                     o_func.define_rel(obj, obj2)
                     
+        hierarchy, barycenter = o_func.hierarchy(system_obj_list)
+        o_func.update_focal_point(hierarchy, barycenter)
+        
+        for body, host in hierarchy.items():
+            if hasattr(body, 'host_body'):
+                body.host_body = host
+        
+        for obj in system_obj_list:
+            obj.host_body = hierarchy.get(obj)
+        
         for obj in system_obj_list:
             obj.chain_function(orbits)
 
@@ -275,6 +286,7 @@ def render():
     for obj in system_obj_list:
         if obj.glow:
             my_shader.setUniform("glow", 1)
+            my_shader.setUniform("activateLight", 1)
             my_shader.setUniform("radius", obj._radius)
             my_shader.setUniformGlm("light.position", obj._position)
             my_shader.setUniform("lightColor", 1.0, 1.0, 1.0)
@@ -288,9 +300,18 @@ def render():
     my_shader.unbind()
 
     my_shader.bind()
-    if orbits:
+    my_shader.setUniform("orbit", 1)
+    if orbits: 
         for obj in orbits:
+            host = obj.sel_object.host_body
+            if isinstance(host, Barycenter) and obj.sel_object in host.members:
+                center = host.position
+            else: 
+                center = obj.sel_object.focal_pos
+            model = glm.translate(glm.mat4(1.0), center)
+            my_shader.setUniformMat4("model", model)
             obj.render(my_shader.shaderId)
+    my_shader.setUniform("orbit", 0)
     my_shader.unbind
     
     glDisable(GL_MULTISAMPLE)

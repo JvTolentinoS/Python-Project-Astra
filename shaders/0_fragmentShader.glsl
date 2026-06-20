@@ -21,15 +21,20 @@ struct Light {
 uniform float radius;
 uniform vec3 lightColor;
 uniform bool glow;
+uniform bool activateLight;
+uniform bool orbit;
 uniform Light light;
 
 void main(){
     float ambient_strenght = 0.0;
     vec3 ambient = ambient_strenght * lightColor;
 
-    if (glow) { 
+    if (orbit) {
     a_frag_color = vec4(f_color, 1.0);
-    vec3 result = f_color * 0.5;
+    vec3 result = f_color;
+    } else if (glow) { 
+    a_frag_color = vec4(f_color, 1.0);
+    vec3 result = f_color * 5;
     bright_color = vec4(result, 1.0);
 
     } else {
@@ -40,7 +45,11 @@ void main(){
     
     float distance = length(light.position - f_position) - radius;
     float attenuation = 1.0 / (light.constant + light.linear*distance + light.quadratic*(distance * distance));
-    diffuse *= attenuation; 
+    if (activateLight) {
+        diffuse *= attenuation; 
+    } else {
+    diffuse *= 0;
+    }
     vec3 result = diffuse * f_color;
 
     float brightness = dot(result, vec3 (0.2126, 0.7152, 0.0722));

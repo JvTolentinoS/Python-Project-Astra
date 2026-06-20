@@ -1,16 +1,17 @@
 import ctypes
 import math
-from PIL import Image
-from camera import Camera
-from dataclasses import dataclass, field, asdict
-from typing import ClassVar
 import functools
+import json
+from dataclasses import dataclass, field, asdict
+import glm
+from PIL import Image
 import numpy as np
+from typing import ClassVar
 from OpenGL.GL import *
 from OpenGL.GLUT import *
-import glm
+from camera import Camera
 import constants as c
-
+import random as r
 
 class Skybox:
     """
@@ -158,7 +159,8 @@ class Object:
     """
     stacks: ClassVar[int] = 80
     sectors: ClassVar[int] = 80
-
+    delta_time: ClassVar[float] = 0
+    
     name: str
     _color: tuple
     _init_position: glm.vec3
@@ -182,6 +184,9 @@ class Object:
     _velocity: glm.vec3 = field(init=False, default_factory=glm.vec3)
     _scaled_position: glm.vec3 = field(init=False, default_factory=glm.vec3)
     _scaled_velocity: glm.vec3 = field(init=False, default_factory=glm.vec3)
+    _focal_mass: float = field(init=False, default=0.0)
+    _focal_pos: glm.vec3 = field(init=False, default_factory=glm.vec3)
+    _focal_vel: glm.vec3 = field(init=False, default_factory=glm.vec3)
     
     # Elementos do Movimento Orbital
     # angular_L = Velocidade Angular em km²/tick
@@ -190,12 +195,6 @@ class Object:
     _host_body: Object = field(init=False, default=None)
     _grav_rel: list = field(init=False, default_factory=list)
     _rel: list = field(init=False, default_factory=list)
-    
-    _focal_pos: glm.vec3 = field(init=False, default_factory=glm.vec3)
-    _focal_mass: float = field(init=False, default=0.0)
-    _focal_vel: glm.vec3 = field(init=False, default_factory=glm.vec3)
-    _scaled_focal_pos: glm.vec3 = field(init=False, default_factory=glm.vec3)
-    
     _angular_momentum: glm.vec3 = field(init=False, default_factory=glm.vec3)
     e_vec3: glm.vec3 = field(init=False, default_factory=glm.vec3)
     has_bond: bool = field(init=False, default=False)
@@ -214,8 +213,6 @@ class Object:
         self._scaled_velocity = self._velocity / c.SIMULATION_DISTANCE_SCALED
         
         self._host_body = None
-        self._focal_mass = None
-        self.scaled_focal_pos = self.focal_pos * c.SIMULATION_DISTANCE_SCALED
         self._angular_momentum = glm.vec3(0.0, 0.0, 0.0)
         self.e_vec3 = self.calc_e_vec3()
         self.has_bond = self.get_bond_status(self.e_vec3)
@@ -403,7 +400,6 @@ class Object:
         qty_verts = len(verts) // 9
         verts = np.array(verts,             # 32 bits
                                  dtype=np.float32)
-
         # Criar VAO
         VAO = glGenVertexArrays(1)
         glBindVertexArray(VAO)
@@ -566,14 +562,14 @@ class Object:
         Retorna o semi-eixo maior sendo (a) = -(U) / 2 * Energia Específica(ee)
         """
         if self.host_body:
-            main_body = self.host_body
+            # main_body = self.host_body
 
-            main_mass = main_body._mass
-            r = (glm.length(self._position - main_body._position)) * c.SIMULATION_DISTANCE_SCALED
-            v2 = glm.length(self._velocity - main_body._velocity)
+            main_mass = self.focal_mass
+            r = (glm.length(self._position - self.focal_pos)) * c.SIMULATION_DISTANCE_SCALED
+            v2 = glm.length(self._velocity - self.focal_vel)
             u_parameter = self.calc_gravitational_parameter(main_mass)
 
-            specific_energy = glm.pow(v2, 2)/2 - u_parameter/r
+            specific_energy = math.pow(v2, 2)/2 - u_parameter/r
             semi_axis = -u_parameter / (2 * specific_energy)
 
             return semi_axis
@@ -587,18 +583,10 @@ class Object:
         return False
 
     def chain_function(self, orbits):
-        self.host_body = define_primary_host(self)
-        if not self.host_body:
-            return
-
-        self.grav_rel = get_orbital_objects(self)
         self.rel_pos = self.calc_rel_pos()
 
-        focal_point = get_focal_point(self.grav_rel)
-        self.focal_pos = focal_point[0]
-        self.focal_vel = focal_point[1]
-        self.focal_mass = focal_point[2]
-
+        # de alguma forma calcular focal
+        
         self.e_vec3 = self.calc_e_vec3()
         self.has_bond = self.get_bond_status(self.e_vec3)
 
@@ -618,322 +606,555 @@ class Object:
                 orbital_object = Orbit(self)
                 orbits.append(orbital_object)
 
-# W.I.P
+
 @dataclass
 class Orbit:
-    """
-    Projeta uma elipse correspondente a órbita ligada de Kepler, a partir do corpo primário.
-    """
-    size: ClassVar[int] = 1000
-    
-    _sel_object: Object
-    _color: tuple = (1.0, 1.0, 1.0)
-    
-    _object_name: str = field(init=False,                   default_factory=str)
-    _object_radius: float = field(init=False,               default_factory=float)
-    _object_semi_major_axis: float = field(init=False,      default_factory=float)
-    
-    _object_position: glm.vec3 = field(init=False,          default_factory=glm.vec3) 
-    _object_angular_momentum: glm.vec3 = field(init=False,  default_factory=glm.vec3)
-    _object_n_angular_momentum: glm.vec3 = field(init=False,default_factory=glm.vec3)
-    _object_epsilon: glm.vec3 = field(init=False,           default_factory=glm.vec3)
-    _object_L_epsilon: glm.vec3 = field(init=False,         default_factory=glm.vec3)
-    _object_n_epsilon: glm.vec3 = field(init=False,         default_factory=glm.vec3)
-    _object_transversal: glm.vec3 = field(init=False,       default_factory=glm.vec3)
-    
-    _object_host: Object = field(init=False,        default=None)
-    _object_host_radius: float = field(init=False,  default_factory=float)
-    _object_host_pos: glm.vec3 = field(init=False,  default_factory=glm.vec3)
-    
-    _draw_array: bool = field(init=False,       default_factory=bool)
-    
-    _trajectory_value: int = field(init=False,  default=0)
-    qty_verts: int = field(init=False,          default=0)
-    verts: int = field(init=False,              default=0)
-    VAO: int = field(init=False,                default=0)
-    VBO: int = field(init=False,                default=0)
-    # Elemento Orbital Global
-    # -----------------------
-    reference_plane = glm.vec3(1.0, 0.0, 0.0)
-
-    def __post_init__(self):
-
-        self._draw_array = True
-        # Parametros dos Corpos
-        # ---------------------
-        self._object_name = self._sel_object.name
-        self._object_radius = self._sel_object.radius
-        self._object_position = self._sel_object.position
-        self._object_angular_momentum = self._sel_object.angular_momentum
-        self._object_n_angular_momentum = glm.normalize(self._object_angular_momentum)
         
-        # Elementos Orbitais
-        # ------------------
-        self._object_epsilon = self._sel_object.calc_e_vec3() 
-        self._object_L_epsilon = glm.length(self._object_epsilon)
-        self._object_n_epsilon = glm.normalize(self._object_epsilon)
-        self._object_transversal = glm.cross(self._object_n_angular_momentum,
-                                             self._object_n_epsilon)
-        self._object_semi_major_axis = self._sel_object.get_semi_major_axis()
+        """
+        Projeta uma elipse correspondente a órbita ligada de Kepler, a partir do corpo primário.
+        """
         
-        # Host
-        # ----
-        self._object_host = self._sel_object.host_body
-        self._object_host_pos = self._object_host.position
-        self._object_host_radius = self._object_host.radius
+        size: ClassVar[int] = 500
         
-        # Trajetória
-        # ----------
-        self._trajectory_value = self.create_orbit()
-        self.VAO = self._trajectory_value[0]
-        self.VBO = self._trajectory_value[1]
-        self.qty_verts = self._trajectory_value[2]
+        _sel_object: Object
+        _color: tuple = (1.0, 1.0, 1.0)
+        
+        _object_name: str = field(init=False,                   default_factory=str)
+        _object_radius: float = field(init=False,               default_factory=float)
+        _object_semi_major_axis: float = field(init=False,      default_factory=float)
+        
+        _object_position: glm.vec3 = field(init=False,          default_factory=glm.vec3) 
+        _object_angular_momentum: glm.vec3 = field(init=False,  default_factory=glm.vec3)
+        _object_n_angular_momentum: glm.vec3 = field(init=False,default_factory=glm.vec3)
+        _object_epsilon: glm.vec3 = field(init=False,           default_factory=glm.vec3)
+        _object_L_epsilon: float = field(init=False,            default=0)
+        _object_n_epsilon: glm.vec3 = field(init=False,         default_factory=glm.vec3)
+        _object_transversal: glm.vec3 = field(init=False,       default_factory=glm.vec3)
+        
+        _object_host: Object = field(init=False,        default=None)
+        _object_host_radius: float = field(init=False,  default_factory=float)
+        
+        _trajectory_offset: glm.vec3 = field(init=False,        default_factory=glm.vec3)
+        _draw_array: bool = field(init=False,       default_factory=bool)
+        
+        _trajectory_value: tuple = field(init=False,  default=tuple)
+        qty_verts: int = field(init=False,          default=0)
+        verts: int = field(init=False,              default=0)
+        VAO: int = field(init=False,                default=0)
+        VBO: int = field(init=False,                default=0)
 
-    def __hash__(self):
-        return hash(self._sel_object.name)
-       
-    @property
-    def sel_object(self):
-        return self._sel_object
-    
-    @property
-    def draw_array(self):
-        return self._draw_array
-    
-    @property
-    def color(self):
-        return self._color
-    
-    @property
-    def object_angular_momentum(self):
-        return self._object_angular_momentum
-    
-    @property
-    def object_n_angular_momentum(self):
-        return self._object_n_angular_momentum 
-    
-    @property
-    def object_epsilon(self):
-        return self._object_epsilon
-    
-    @property
-    def object_L_epsilon(self):
-        return self._object_L_epsilon
-
-    @property
-    def object_n_epsilon(self):
-        return self._object_n_epsilon
-    
-    @property
-    def object_position(self):
-        return self._object_position
-
-    @property
-    def object_semi_major_axis(self):
-        return self._object_semi_major_axis
-    
-    @property
-    def object_host(self):
-        return self._object_host
-    
-    @property
-    def object_host_radius(self):
-        return self._object_host_radius
-    
-    @property
-    def object_host_radius(self):
-        return self._object_host_radius
-    
-    @property
-    def object_radius(self):
-        return self._object_radius
-    
-    @property
-    def object_transversal(self):
-        return self._object_transversal
-    
-    @object_position.setter
-    def object_position(self, value):
-        self._object_position = value
-    
-    @object_angular_momentum.setter
-    def object_angular_momentum(self, value):
-        self._object_angular_momentum = value
-    
-    @object_n_angular_momentum.setter
-    def object_n_angular_momentum(self, value):
-        self._object_n_angular_momentum = value
-    
-    @object_radius.setter
-    def object_radius(self, value):
-        self._object_radius = value
-    
-    @object_epsilon.setter
-    def object_epsilon(self, value):
-        self._object_epsilon = value
-    
-    @object_n_epsilon.setter
-    def object_n_epsilon(self, value):
-        self._object_n_epsilon = value
+        # debugging
+        draw_text: str = field(init=False,          default=str)
         
-    @object_L_epsilon.setter
-    def object_L_epsilon(self, value):
-        self._object_L_epsilon = value
-        
-    @object_host_radius.setter
-    def object_host_radius(self, value):
-        self._object_host_radius = value
-    
-    @object_transversal.setter
-    def object_transversal(self, value):
-        self._object_transversal = value
-    
-    @draw_array.setter
-    def draw_array(self, value):
-        self._draw_array = value
-    
-    @object_host.setter
-    def object_host(self, value):
-        self._object_host = value
-    
-    def read_asdict(self):
-        print(asdict(self))
-    
-    def draw(func):
-        @functools.wraps(func)
-        def wrapper(self, *args, **kwargs):
-            epsilon = self.object_L_epsilon
-            axis = self.object_semi_major_axis
-            host_r = self.object_host_radius
-            obj_r = self.object_radius
+        def __post_init__(self):
             
-            if not (axis > 0 and (0 <= epsilon < 1)):
-                self.draw_array = False
-                return np.empty((0, 6), dtype=np.float32), 9
+            self._color = (r.uniform(0, 1),
+                           r.uniform(0, 1),
+                           r.uniform(0, 1))
             
-            peri_r = axis * (1.0 - epsilon)
-            if peri_r <= (host_r + obj_r):
-                self.draw_array = False
-                return np.empty((0, 6), dtype=np.float32), 0
-            self.draw_array = True
-            return func(self, *args, **kwargs)
-        return wrapper
-    
-    def get_rad_dist(self, theta):
-        """
-        Retorna a distância radial (r) = a * (1 - e²) / (1 + e*cos(theta)) alinhada ao eixo transversal.
-        """
-        if self.object_semi_major_axis > 0 and ( 0 <= self.object_L_epsilon < 1):
-            semi_major_axis = self.object_semi_major_axis
-            transversal = self.object_transversal
-            e_epsilon = self.object_L_epsilon
-            n_epsilon = self.object_n_epsilon
-
-            radial_distance = semi_major_axis * (1 - glm.pow(e_epsilon, 2)) / (1 + (e_epsilon * glm.cos(theta)))
-
-            t_radial_distance = (radial_distance * glm.cos(theta) * n_epsilon
-                                 + radial_distance * glm.sin(theta) * transversal)
-
-            #print(e_epsilon)
-            return t_radial_distance
-        return glm.vec3(0.0, 0.0, 0.0)
-
-    @draw
-    def trajectory(self):
-        verts = []
-        delta_theta = (2 * math.pi) / self.size
-        for i in range(self.size):
-            theta = i * delta_theta
-            trajectory_vert = (self.get_rad_dist(theta) + self._object_host_pos) / c.SIMULATION_DISTANCE_SCALED
-            verts.append([trajectory_vert.x,
-                          trajectory_vert.y,
-                          trajectory_vert.z,
-                          self.color[0],
-                          self.color[1],
-                          self.color[2]])
-        qty_verts = len(verts)
-        verts = np.array(verts, 
-                         dtype=np.float32)
+            self._draw_array = True
+            # Parametros dos Corpos
+            # ---------------------
+            self._object_name = self._sel_object.name
+            self._object_radius = self._sel_object.radius
+            self._object_position = self._sel_object.position
+            self._object_angular_momentum = self._sel_object.angular_momentum
+            self._object_n_angular_momentum = glm.normalize(self._object_angular_momentum)
+            
+            # Elementos Orbitais
+            # ------------------
+            self._object_epsilon = self._sel_object.calc_e_vec3() 
+            self._object_L_epsilon = glm.length(self._object_epsilon)
+            self._object_n_epsilon = glm.normalize(self._object_epsilon)
+            self._object_transversal = glm.cross(self._object_n_angular_momentum,
+                                                self._object_n_epsilon)
+            self._object_semi_major_axis = self._sel_object.get_semi_major_axis()
+            
+            # Host
+            # ----
+            self._object_host = self._sel_object.host_body
+            self._object_host_radius = self._object_host.radius
+            
+            # Trajetória
+            # ----------
+            self._trajectory_value = self.create_orbit()
+            self.VAO = self._trajectory_value[0]
+            self.VBO = self._trajectory_value[1]
+            self.qty_verts = self._trajectory_value[2]
+        def __hash__(self):
+            return hash(self._sel_object.name)
         
-        return verts, qty_verts
-
-    def create_orbit(self):
-        # verify
-        trajectory = self.trajectory()
+        @property
+        def sel_object(self):
+            return self._sel_object
         
-        verts = trajectory[0]
-        qty_verts = trajectory[1]
+        @property
+        def draw_array(self):
+            return self._draw_array
         
-        VAO = glGenVertexArrays(1)
-        glBindVertexArray(VAO)
-
-        VBO = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER,
-                    VBO)
-        glBufferData(GL_ARRAY_BUFFER,
-                    verts, 
-                    GL_DYNAMIC_DRAW)
-
-        glVertexAttribPointer(0,
-                            3,
-                            GL_FLOAT,
-                            GL_FALSE,
-                            6*4,
-                            ctypes.c_void_p(0))
-
-        glVertexAttribPointer(1,
-                            3,
-                            GL_FLOAT,
-                            GL_FALSE,
-                            6*4,
-                            ctypes.c_void_p(3*4))
-
-        glEnableVertexAttribArray(0)
-        glEnableVertexAttribArray(1)
-
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
-        glBindVertexArray(0)
-
-        return VAO, VBO, qty_verts
-    
-    def update_orbit(self):
-        """
-        Realiza uma atualização parcial dos atributos do Vertex no Buffer Object (VBO).
-        """
-        self.object_position = self.sel_object.position # focal pos
-        self.object_radius = self._sel_object.radius
-        self.object_angular_momentum = self.sel_object.angular_momentum
-        self.object_n_angular_momentum = glm.normalize(self.object_angular_momentum)
-       
-        self.object_epsilon = self._sel_object.e_vec3
-        self.object_L_epsilon = glm.length(self.object_epsilon)
-        self.object_n_epsilon = glm.normalize(self.object_epsilon)
-        self.object_transversal = glm.cross(self.object_n_angular_momentum,
-                                            self.object_n_epsilon)
+        @property
+        def color(self):
+            return self._color
         
-        self.object_host = self.sel_object.host_body
-        self.object_host_radius = self.object_host.radius
+        @property
+        def object_angular_momentum(self):
+            return self._object_angular_momentum
         
-        self._trajectory_value = self.trajectory()
-        self.verts = self._trajectory_value[0]
-        self.qty_verts = self._trajectory_value[1]
+        @property
+        def object_n_angular_momentum(self):
+            return self._object_n_angular_momentum 
         
-        glBindBuffer(GL_ARRAY_BUFFER, self.VBO)
-        glBufferSubData(GL_ARRAY_BUFFER, 0, self.verts.nbytes, self.verts)
-        glBindBuffer(GL_ARRAY_BUFFER, 0)
+        @property
+        def object_epsilon(self):
+            return self._object_epsilon
+        
+        @property
+        def object_L_epsilon(self):
+            return self._object_L_epsilon
 
-    def render(self, shaderId):
-        """
-        Vincula o nome do Vertex Array Object gerado em glGenVertexArrays
-        para encapsular o VBO, descrição dos vértices e estado de ativação dos
-        atributos, para assim sequenciar a construção dos primitivos em DrawArray.
-        """
-        if self.draw_array and self.qty_verts > 0:
-            glBindVertexArray(self.VAO)
-            glDrawArrays(GL_LINE_LOOP, 0, self.qty_verts)
+        @property
+        def object_n_epsilon(self):
+            return self._object_n_epsilon
+        
+        @property
+        def object_position(self):
+            return self._object_position
+
+        @property
+        def object_semi_major_axis(self):
+            return self._object_semi_major_axis
+        
+        @property
+        def object_host(self):
+            return self._object_host
+        
+        @property
+        def object_host_radius(self):
+            return self._object_host_radius
+        
+        @property
+        def object_host_radius(self):
+            return self._object_host_radius
+        
+        @property
+        def object_radius(self):
+            return self._object_radius
+        
+        @property
+        def object_transversal(self):
+            return self._object_transversal
+        
+        @property
+        def trajectory_offset(self):
+            return self._trajectory_offset
+        
+        @trajectory_offset.setter
+        def trajectory_offser(self, value):
+            self._trajectory_offset = value
+            
+        @object_position.setter
+        def object_position(self, value):
+            self._object_position = value
+        
+        @object_angular_momentum.setter
+        def object_angular_momentum(self, value):
+            self._object_angular_momentum = value
+        
+        @object_n_angular_momentum.setter
+        def object_n_angular_momentum(self, value):
+            self._object_n_angular_momentum = value
+        
+        @object_semi_major_axis.setter
+        def object_semi_major_axis(self, value):
+            self._object_semi_major_axis = value
+        
+        @object_radius.setter
+        def object_radius(self, value):
+            self._object_radius = value
+        
+        @object_epsilon.setter
+        def object_epsilon(self, value):
+            self._object_epsilon = value
+        
+        @object_n_epsilon.setter
+        def object_n_epsilon(self, value):
+            self._object_n_epsilon = value
+            
+        @object_L_epsilon.setter
+        def object_L_epsilon(self, value):
+            self._object_L_epsilon = value
+            
+        @object_host_radius.setter
+        def object_host_radius(self, value):
+            self._object_host_radius = value
+        
+        @object_transversal.setter
+        def object_transversal(self, value):
+            self._object_transversal = value
+        
+        @draw_array.setter
+        def draw_array(self, value):
+            self._draw_array = value
+        
+        @object_host.setter
+        def object_host(self, value):
+            self._object_host = value
+        
+        def read_asdict(self):
+            print(asdict(self))
+        
+        def draw(func):
+            @functools.wraps(func)
+            def wrapper(self, *args, **kwargs):
+                epsilon = self.object_L_epsilon
+                axis = self.object_semi_major_axis
+                host_r = self.object_host_radius
+                obj_r = self.object_radius
+                
+                if not (axis > 0 and (0 <= epsilon < 1)):
+                    self.draw_array = False
+                    return np.empty((0, 6), dtype=np.float32), 0
+                
+                peri_r = (axis * (1.0 - epsilon)) / c.SIMULATION_DISTANCE_SCALED 
+                if peri_r <= (host_r + obj_r):
+                    self.draw_array = False
+                    return np.empty((0, 6), dtype=np.float32), 0
+                self.draw_array = True
+                return func(self, *args, **kwargs)
+            return wrapper
+        
+        def get_rad_dist(self, theta):
+            """
+            Retorna a distância radial (r) = a * (1 - e²) / (1 + e*cos(theta)) alinhada ao eixo transversal.
+            """
+            if self.object_semi_major_axis > 0 and ( 0 <= self.object_L_epsilon < 1):
+                semi_major_axis = self.object_semi_major_axis
+                transversal = self.object_transversal
+                e_epsilon = self.object_L_epsilon
+                n_epsilon = self.object_n_epsilon
+
+                radial_distance = semi_major_axis * (1 - glm.pow(e_epsilon, 2)) / (1 + (e_epsilon * glm.cos(theta)))
+
+                t_radial_distance = (radial_distance * glm.cos(theta) * n_epsilon
+                                    + radial_distance * glm.sin(theta) * transversal)
+
+                #print(e_epsilon)
+                return t_radial_distance
+            return glm.vec3(0.0, 0.0, 0.0)
+
+        @draw
+        def trajectory(self):
+            verts = []
+            delta_theta = (2 * math.pi) / self.size
+            host = self.sel_object.host_body
+            
+            if isinstance(host, Barycenter) and self.sel_object in host.members:
+                total_mass = host.mass
+                companion_mass = total_mass - self.sel_object.mass
+                orbit_scale = companion_mass / total_mass
+                #print(f"{self.sel_object.name}",f"\n{self.sel_object.position}" ,f"\nis istance: {orbit_scale}", f"\n{center}")
+            else:
+                orbit_scale = 1.0
+                #print(f"is istance else: {orbit_scale}")
+                
+            for i in range(self.size):
+                theta = i * delta_theta
+                trajectory_vert = ((self.get_rad_dist(theta) * orbit_scale) / c.SIMULATION_DISTANCE_SCALED) #+ self.sel_object.focal_pos
+                verts.append([trajectory_vert.x,
+                            trajectory_vert.y,
+                            trajectory_vert.z,
+                            self.color[0],
+                            self.color[1],
+                            self.color[2]])
+            qty_verts = len(verts)
+            verts = np.array(verts, 
+                            dtype=np.float32)
+            
+            return verts, qty_verts
+
+        def create_orbit(self):
+            # verify
+            trajectory = self.trajectory()
+            
+            verts = trajectory[0]
+            qty_verts = trajectory[1]
+            
+            VAO = glGenVertexArrays(1)
+            glBindVertexArray(VAO)
+
+            VBO = glGenBuffers(1)
+            glBindBuffer(GL_ARRAY_BUFFER,
+                        VBO)
+            glBufferData(GL_ARRAY_BUFFER,
+                        verts.nbytes,
+                        verts, 
+                        GL_DYNAMIC_DRAW)
+
+            glVertexAttribPointer(0,
+                                3,
+                                GL_FLOAT,
+                                GL_FALSE,
+                                6*4,
+                                ctypes.c_void_p(0))
+
+            glVertexAttribPointer(1,
+                                3,
+                                GL_FLOAT,
+                                GL_FALSE,
+                                6*4,
+                                ctypes.c_void_p(3*4))
+
+            glEnableVertexAttribArray(0)
+            glEnableVertexAttribArray(1)
+
+            glBindBuffer(GL_ARRAY_BUFFER, 0)
             glBindVertexArray(0)
 
-# W.I.P
+            return VAO, VBO, qty_verts
+        
+        def update_orbit(self):
+            """
+            Realiza uma atualização parcial dos atributos do Vertex no Buffer Object (VBO).
+            """
+            self.object_position = self.sel_object.position # focal pos
+            self.object_radius = self._sel_object.radius
+            self.object_angular_momentum = self.sel_object.angular_momentum
+            self.object_n_angular_momentum = glm.normalize(self.object_angular_momentum)
+            self.object_semi_major_axis = self.sel_object.get_semi_major_axis() 
+            self.object_epsilon = self._sel_object.e_vec3
+            self.object_L_epsilon = glm.length(self.object_epsilon)
+            self.object_n_epsilon = glm.normalize(self.object_epsilon)
+            self.object_transversal = glm.cross(self.object_n_angular_momentum,
+                                                self.object_n_epsilon)
+            
+            self.object_host = self.sel_object.host_body
+            self.object_host_radius = self.object_host.radius
+            
+            self._trajectory_value = self.trajectory()
+            self.verts = self._trajectory_value[0]
+            self.qty_verts = self._trajectory_value[1]
+            
+            if not self.draw_array or self.qty_verts == 0:
+                return
+            
+            glBindBuffer(GL_ARRAY_BUFFER, self.VBO)
+            glBufferSubData(GL_ARRAY_BUFFER, 0, self.verts.nbytes, self.verts)
+            glBindBuffer(GL_ARRAY_BUFFER, 0)
+
+        def render(self, shaderId):
+            """
+            Vincula o nome do Vertex Array Object gerado em glGenVertexArrays
+            para encapsular o VBO, descrição dos vértices e estado de ativação dos
+            atributos, para assim sequenciar a construção dos primitivos em DrawArray.
+            """
+            if self.draw_array and self.qty_verts > 0:
+                glBindVertexArray(self.VAO)
+                glDrawArrays(GL_LINE_LOOP, 0, self.qty_verts)
+                glBindVertexArray(0)
+ 
+        
+@dataclass
+class Barycenter:
+    name: str
+    members: list
+    mass: float = 1.0
+    host: Object = False
+    
+    radius: float = 0.0
+    _position: glm.vec3 = field(init=False, default_factory=glm.vec3)
+    _velocity: glm.vec3 = field(init=False, default_factory=glm.vec3)
+    
+    @property
+    def position(self): return self._position
+    
+    @property
+    def velocity(self): return self._velocity
+    
+    @velocity.setter
+    def velocity(self, v): self._velocity = v
+    
+    @position.setter
+    def position(self, v): self._position = v
+        
+    def __hash__(self):
+        return hash(self.name)    
+    
+    def update(self):
+        barycenter_mass = sum(m.mass for m in self.members)
+        
+        focal_point_x = 0
+        focal_point_y = 0
+        focal_point_z = 0
+        
+        focal_vel_x = 0
+        focal_vel_y = 0
+        focal_vel_z = 0
+        
+        for orb in self.members:
+            
+            focal_point_x += orb.position.x * orb.mass
+            focal_point_y += orb.position.y * orb.mass
+            focal_point_z += orb.position.z * orb.mass
+            
+            focal_vel_x += orb.velocity.x * orb.mass
+            focal_vel_y += orb.velocity.y * orb.mass
+            focal_vel_z += orb.velocity.z * orb.mass
+
+        result_pos_x = focal_point_x / barycenter_mass
+        result_pos_y = focal_point_y / barycenter_mass
+        result_pos_z = focal_point_z / barycenter_mass
+        
+        result_vel_x = focal_vel_x / barycenter_mass
+        result_vel_y = focal_vel_y / barycenter_mass
+        result_vel_z = focal_vel_z / barycenter_mass
+        
+        self._position = glm.vec3(result_pos_x,
+                              result_pos_y,
+                              result_pos_z)
+        
+        self._velocity = glm.vec3(result_vel_x,
+                              result_vel_y,
+                              result_vel_z)
+        
+        self.mass = barycenter_mass
+ 
+        
+def define_primary(body_a, body_b):
+        dist = glm.length(body_a.position - body_b.position) * c.SIMULATION_DISTANCE_SCALED
+        if dist <= 0:
+            return 0
+        return body_b.mass / math.pow(dist, 2)
+    
+def is_binary(binary_a, binary_b):
+        if binary_a.mass <= 0 or binary_b.mass <=0:
+            return False
+        
+        satellite = binary_a if binary_a.mass < binary_b.mass else binary_b      
+        primary = binary_a if binary_a.mass >= binary_b.mass else binary_b
+        
+        mass_ratio = satellite.mass / primary.mass
+        if mass_ratio < 0.1:
+            return False
+
+        binary_group = [satellite, primary]
+        
+        binary_mass = sum(m.mass for m in binary_group)
+        
+        focal_point_x = 0
+        focal_point_y = 0
+        focal_point_z = 0
+        
+        for orb in binary_group:
+            
+            focal_point_x += orb.position.x * orb.mass
+            focal_point_y += orb.position.y * orb.mass
+            focal_point_z += orb.position.z * orb.mass
+            
+        result_pos_x = focal_point_x / binary_mass
+        result_pos_y = focal_point_y / binary_mass
+        result_pos_z = focal_point_z / binary_mass
+        
+        position = glm.vec3(result_pos_x,
+                              result_pos_y,
+                              result_pos_z)
+        
+        dist_primary = glm.length(position - primary.position) * c.SIMULATION_DISTANCE_SCALED
+        primary_radius = primary.radius * c.RADII_SCALE / 1000
+        
+        return dist_primary > primary_radius
+
+def hierarchy(bodies: list) -> dict:
+
+        node = list(bodies)
+        hierarchy = {b: None for b in node}
+        barycenter = []
+        assigned = set()
+        
+        sorted_node = sorted(node, key=lambda b: b.mass, reverse=True)
+        
+        for i, body in enumerate(sorted_node):
+            if body in assigned:
+                continue
+            for j in range(i + 1, len(sorted_node)):
+                candidate = sorted_node[j]
+                if candidate in assigned:
+                    continue
+                if is_binary(body, candidate):
+                    if define_dominance(body, candidate, bodies):
+                        continue
+                    bc = Barycenter(
+                        name=f"BC_{body.name}_{candidate.name}",
+                        members=[body, candidate]
+                    )
+                    
+                    bc.update()
+                    
+                    barycenter.append(bc)
+                    hierarchy[body] = bc
+                    hierarchy[candidate] = bc
+                    hierarchy[bc] = None
+                    
+                    assigned.add(body)
+                    assigned.add(candidate)
+                    node.append(bc)
+                    break
+                
+        all_node = sorted(node, key=lambda b: b.mass, reverse=True)
+        
+        for body in all_node:
+            if hierarchy.get(body):
+                continue
+            
+            if not body.rel if hasattr(body, 'rel') else False:
+                continue
+            
+            primary_host = None
+            primary_host_f = 0.0
+            
+            candidates = [n for n in all_node if n is not body and n.mass > body.mass]
+            
+            for candidate in candidates:
+                primary_host_candidate = hierarchy.get(candidate)
+                if primary_host_candidate and define_hill_zone(body, candidate, primary_host_candidate):
+                    dom = define_primary(body, candidate)
+                    if dom > primary_host_f: 
+                        primary_host_f = dom
+                        primary_host = candidate
+            
+            if primary_host is None and candidates:
+                primary_host = max(candidates,
+                                   key=lambda c: define_primary(body, c))
+                
+            hierarchy[body] = primary_host
+        # print(f"H: {hierarchy}\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n B: {barycenter}\n")
+        return hierarchy, barycenter
+    
+def update_focal_point(hierarchy: dict, barycenter: list):
+        for bc in barycenter:
+            bc.update()
+        
+        for body, host in hierarchy.items():
+            if host is None:
+                continue
+            if not hasattr(body, 'focal_pos'):
+                continue
+            
+            if isinstance(host, Barycenter):
+                if body in host.members: 
+                    other = next(m for m in host.members if m is not body)
+                    body.focal_pos = other.position
+                    body.focal_vel = other.velocity
+                    body.focal_mass = other.mass
+                else: 
+                    body.focal_pos  = host.position 
+                    body.focal_vel  = host.velocity
+                    body.focal_mass = host.mass
+            else: 
+                body.focal_pos  = host.position 
+                body.focal_vel  = host.velocity
+                body.focal_mass = host.mass
+    # W.I.P
+
 def define_rel(current_body, iterated_body):
 
     if iterated_body:
@@ -963,39 +1184,6 @@ def define_rel(current_body, iterated_body):
         if not is_registered:
             current_body.rel.append(iterated_body_info)
 
-def define_host(current_body = Object):
-    if current_body.rel:
-        body_list = []
-        body_mass = sorted(current_body.rel,
-                        key=lambda rel: rel[1],
-                        reverse=True)
-        for body in body_mass:
-            distance = glm.length(body[4].scaled_position - current_body.scaled_position)
-            if distance > 0:
-                mass_r2 = body[1] / pow(distance, 2)
-                body_list.append([mass_r2, body[4]])
-        most_massive = max(body_list,
-                           key=lambda mass_r2: mass_r2[0])
-        return most_massive[1]
-
-def define_primary_host(current_body = Object):
-    if current_body.rel:
-        current_body_rel = sorted(current_body.rel,
-                                          key=lambda rel: rel[1],
-                                          reverse=True)
-
-        for body in current_body_rel:
-            parent_body = body[4]
-            host_body = define_host(parent_body)
-
-            if define_hill_zone(current_body,
-                                parent_body,
-                                host_body):
-                return parent_body
-        if current_body.mass <= current_body_rel[0][1]:
-            return current_body_rel[0][4]
-    return None
-
 def define_hill_zone(current_body, parent_body, host_body):
     if parent_body and host_body:
         current_body_dist = glm.length(current_body.position - parent_body.position) * c.SIMULATION_DISTANCE_SCALED
@@ -1007,47 +1195,45 @@ def define_hill_zone(current_body, parent_body, host_body):
             return True
         return False
 
-def get_focal_point(orbital_objects):
-    if orbital_objects:
-        orbital_objs_mass: float = sum(orb.mass for orb in orbital_objects)
+def define_dominance(body_a, body_b, body_list):
+    dist = glm.length(body_a.position - body_b.position) * c.SIMULATION_DISTANCE_SCALED
+    if dist <= 0:
+        return True
 
-        focal_point_pos = glm.vec3(0.0, 0.0, 0.0)
-        focal_point_vel = glm.vec3(0.0, 0.0, 0.0)
+    mutual_acc = (body_a.mass + body_b.mass) / math.pow(dist, 2)
+    
+    binary_group = [body_a, body_b]
+    binary_mass = sum(m.mass for m in binary_group)
+    
+    focal_point_x = 0
+    focal_point_y = 0
+    focal_point_z = 0
+    
+    for orb in binary_group:
+            
+        focal_point_x += orb.position.x * orb.mass
+        focal_point_y += orb.position.y * orb.mass
+        focal_point_z += orb.position.z * orb.mass
+            
+    result_pos_x = focal_point_x / binary_mass
+    result_pos_y = focal_point_y / binary_mass
+    result_pos_z = focal_point_z / binary_mass
         
-        for orb in orbital_objects:
-            focal_point_pos += orb.position * orb.mass
-            focal_point_vel += orb.velocity * orb.mass
-
-        result_pos = focal_point_pos / orbital_objs_mass
-        result_vel = focal_point_vel / orbital_objs_mass
-
-        return result_pos, result_vel, orbital_objs_mass
-
-def verify_binary_pair(binary_1, binary_2):
-    binary_system = [binary_1, binary_2]
-
-    if binary_1.mass >= binary_2.mass:
-        host = binary_1
-        parent = binary_2
-    else:
-        host = binary_2
-        parent = binary_1
-
-    focal_pos = get_focal_point(binary_system)[1]
-
-    focal_parent_dist = glm.length(focal_pos - parent.position)
-
-    return
-
-def get_orbital_objects(current_body):
-
-    if not current_body.host_body:
-        return []
-
-    host = current_body.host_body
-
-    if host is current_body or verify_binary_pair(current_body, host):
-        return [host, current_body]
-
-    return [host]
-
+    position = glm.vec3(result_pos_x,
+                            result_pos_y,
+                            result_pos_z)
+    
+    max_mass = max(body_a.mass, body_b.mass)
+    for other in body_list:
+        if other is body_a or other is body_b:
+            continue
+        if other.mass <= max_mass:
+            continue
+        dist_other = glm.length(position - other.position) * c.SIMULATION_DISTANCE_SCALED
+        if dist_other <= 0:
+            continue
+        acc_other = other.mass / math.pow(dist_other, 2)
+        if acc_other > mutual_acc:
+            return True
+    return False
+        

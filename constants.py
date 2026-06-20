@@ -18,3 +18,5 @@ SIMULATION_DISTANCE_SCALED = 1916
 SCALE_KM = 1000
 SCALE_KM2 = 1e9 # Para converter o parametero gravitacional que está em (m³ kg^-1 s^-2) em km
 RADII_SCALE = 300000
+
+

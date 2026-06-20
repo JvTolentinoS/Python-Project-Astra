@@ -1,3 +1,4 @@
+import json
 import math
 import glm
 from OpenGL.GLUT import *  
@@ -45,6 +46,7 @@ class Camera:
 
             # para simulação
             self.objs_list = []
+            self.orb_list = []
             self.pause = False
             self.current_speed = 0
             self.selector = False
@@ -165,7 +167,7 @@ class Camera:
             if key == b"o" or key == b"O": # selector
                 if self.target_pointer < len(self.objs_list):
                     self.selector = True
-                    self.select_target(self.objs_list)
+                    self.select_target(self.objs_list, self.orb_list)
                     self.target_pointer += 1
                 else:
                     self.target_pointer = 0
@@ -204,7 +206,7 @@ class Camera:
                 self.process_keyboard("DOWN")
 
         # Selector
-        def select_target(self, objs = list):
+        def select_target(self, objs = list, orb = list):
             if self.selector:
                 object_position = objs[self.target_pointer].position
                 object_radius = objs[self.target_pointer].radius
@@ -213,8 +215,9 @@ class Camera:
                 z = object_position[2] + 4*object_radius
                 
                 self.camera_pos = glm.vec3(x, y, z)
-                print(objs[self.target_pointer].read_asdict)
-                #   print(f"\n# Nome: {objs[self.target_pointer].name} \n" + f"# Massa: {objs[self.target_pointer].mass} kg \n" + f"# Raio: {int(objs[self.target_pointer].radius * (c.RADII_SCALE)/1000)} km")
+                # print(objs[self.target_pointer].__dict__)
+                print(orb[self.target_pointer].__dict__)
+                # print(f"\n# Nome: {objs[self.target_pointer].name} \n" + f"# Massa: {objs[self.target_pointer].mass} kg \n" + f"# Raio: {int(objs[self.target_pointer].radius * (c.RADII_SCALE)/1000)} km")
                 
         def get_projection(self):
             return glm.perspective(glm.radians(45.0), 
